@@ -14,6 +14,7 @@ source/LiDAR-agnostic and parameterized (no secrets or hardcoded hosts).
 | `render_scene_qa.py` | Per-scene QA from **any** result (single or **multi**): writes an overlay PNG + a colored PCD. Reads intrinsics from `--config` when the result file lacks them (the multi result has no intrinsics). | `<scene_dir> <result.txt> --config cfg --overlay png --colored pcd` |
 | **`multi_capture.sh`** | Full **multi-scene** run: auto-starts the LiDAR driver, then per angle pauses to reposition the board → captures → single-scene calib → joint fit → per-scene QA. Uses auto-ROI. | `[cam_base] [num_angles] [sec]`; env `CH/TOPIC/FRAME/RING_FLAG/LIDAR_LAUNCH/LIDAR_USER` |
 | **`pick_multi_roi.sh`** | Multi-scene with **hand-picked ROI** per scene (for tilted boards where auto-ROI fails): pick → auto-update yaml → calib → joint fit → per-scene QA. Data must already be captured. | `[cam] [scenes…]`; env `PYTHON`, `DISPLAY` |
+| `intrinsic_board_check.py` | Validate camera intrinsics vs the physical board: independently reconstruct the 4 markers (per-marker solvePnP) and back-project the detected ring centers → distances vs ground truth. | `<image> fx fy cx cy k1 k2 p1 p2` |
 
 ## Quick flow
 
