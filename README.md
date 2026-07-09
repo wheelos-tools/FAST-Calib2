@@ -19,6 +19,11 @@ FAST-Calib2 extends [FAST-Calib](https://github.com/hku-mars/FAST-Calib) to LiDA
   <font color=#a0a0a0 size=2>Mid360 calibration example.</font>
 </p>
 
+## 📖 Documentation
+
+- **[Detailed LiDAR↔Camera calibration guide](docs/lidar2camera_calibration_guide.md)** ([中文](docs/lidar2camera_calibration_guide_zh.md)) — end-to-end: environment setup, data capture, formatting, calibration, and evaluation, including Apollo/Cyber sources, multi-scene, and troubleshooting.
+- **[Capture & QA helper scripts](scripts/README_lidar2cam_capture.md)** — `capture_scene.sh`, `record_to_pcd.py`, `pcd_to_bag.py`, `pick_roi.py`, `overlay_reproj.py` / `render_scene_qa.py`, `multi_capture.sh` / `pick_multi_roi.sh`, `intrinsic_board_check.py`.
+
 ## 1. Prerequisites
 
 PCL>=1.8, OpenCV>=4.0.
