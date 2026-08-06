@@ -43,12 +43,21 @@ with open(scene + "/cloud.pcd") as f:
             d = True
 P = np.asarray(P); I = np.asarray(I)
 
+def project(Pc):
+    """Pinhole + plumb-bob (k1 k2 p1 p2) projection, matching the calib model."""
+    x = Pc[:, 0] / Pc[:, 2]
+    y = Pc[:, 1] / Pc[:, 2]
+    r2 = x * x + y * y
+    rad = 1 + k1 * r2 + k2 * r2 * r2
+    xd = x * rad + 2 * p1 * x * y + p2 * (r2 + 2 * x * x)
+    yd = y * rad + p1 * (r2 + 2 * y * y) + 2 * p2 * x * y
+    return fx * xd + cx, fy * yd + cy
+
 # transform lidar -> camera, project
 Pc = (R @ P.T).T + t
 m = Pc[:, 2] > 0.05
 Pc, Ii = Pc[m], I[m]
-u = (fx * Pc[:, 0] / Pc[:, 2] + cx)
-v = (fy * Pc[:, 1] / Pc[:, 2] + cy)
+u, v = project(Pc)
 inb = (u >= 0) & (u < W) & (v >= 0) & (v < H)
 u, v, Ii = u[inb].astype(int), v[inb].astype(int), Ii[inb]
 
@@ -79,7 +88,8 @@ except Exception as e:
 for C in centers:
     Cc = R @ np.array(C) + t
     if Cc[2] > 0:
-        cu = int(fx * Cc[0] / Cc[2] + cx); cv_ = int(fy * Cc[1] / Cc[2] + cy)
+        cus, cvs = project(Cc.reshape(1, 3))
+        cu, cv_ = int(cus[0]), int(cvs[0])
         cv2.drawMarker(img, (cu, cv_), (0, 255, 0), cv2.MARKER_CROSS, 40, 3)
         cv2.circle(img, (cu, cv_), 6, (0, 255, 0), 2)
 

@@ -1364,7 +1364,10 @@ private:
             return false;
         }
 
-        extractPlaneInliers(filtered_cloud_, plane_coefficients, plane_cloud_, 0.015);
+        // 0.015 -> 0.07: AT128 saturated retro-tape returns bloom 2-7 cm off the
+        // board plane (measured on car-ningde-orin); a 1.5 cm gate silently
+        // drops most ring points (guide §4.2 "亮环点离面被剔除").
+        extractPlaneInliers(filtered_cloud_, plane_coefficients, plane_cloud_, 0.07);
         ROS_INFO("Plane cloud size: %zu", plane_cloud_->size());
         if (plane_cloud_->size() < 500)
         {
@@ -1428,7 +1431,9 @@ private:
                                                  const PlaneAlignment& alignment)
     {
         annulus_original_cloud_->clear();
-        const double plane_distance_threshold = 0.03;
+        // 0.03 -> 0.07: match the relaxed plane gate above; saturated ring
+        // returns sit up to ~6 cm off-plane on the AT128.
+        const double plane_distance_threshold = 0.07;
         if (!extractHighIntensityPointsNearPlane(plane_cloud_, plane_coefficients,
                                                  plane_distance_threshold,
                                                  annulus_original_cloud_, "Annulus"))
@@ -1536,11 +1541,11 @@ private:
 
         pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
         // AT128 beams are non-uniform: on this rig the rings land on scan lines
-        // ~0.087 m apart vertically, while distinct rings stay >=0.17 m apart,
-        // so the tolerance must sit between those (guide §4.2 direction, tuned
-        // from measured spacing). Min size 200->30: only ~250 pts per ring
-        // after voxel sampling.
-        ec.setClusterTolerance(0.12);
+        // up to ~0.087 m apart (board at 6 m), while distinct rings merge once
+        // the tolerance reaches ~0.12 (board at 2.5 m), so the workable window
+        // measured across both ranges is 0.09-0.11 (guide §4.2 direction).
+        // Min size 200->30: only ~250 pts per ring after voxel sampling.
+        ec.setClusterTolerance(0.10);
         ec.setMinClusterSize(30);
         ec.setMaxClusterSize(50000);
         ec.setSearchMethod(tree);
