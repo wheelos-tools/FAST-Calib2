@@ -1,0 +1,59 @@
+# ============================================================================
+# FAST-Calib2 per-camera config  --  cam2  vs  Vanjee LiDAR
+# ----------------------------------------------------------------------------
+# Copy/edit one of these per physical camera (cam0..cam4). The launch files
+# (calib_cam.launch / multi_calib_cam.launch) load this by `cam:=cam2`.
+#
+#  >>> TODO: replace every value marked  # TODO  with this camera's real value.
+#      Until then the extrinsic result is meaningless.
+# ============================================================================
+
+# --- Camera intrinsics (pinhole + radial/tangential distortion) -------------
+# TODO: paste this camera's calibrated intrinsics. Placeholder values below are
+#       only to keep the file parseable.
+  fx: 1000.0   # TODO
+  fy: 1000.0   # TODO
+  cx: 960.0    # TODO  (~ image_width / 2)
+  cy: 540.0    # TODO  (~ image_height / 2)
+  k1: 0.0      # TODO
+  k2: 0.0      # TODO
+  p1: 0.0      # TODO
+  p2: 0.0      # TODO
+
+# --- Calibration target geometry --------------------------------------------
+# These describe the reflective annular board (see README section 2). Adjust to
+# match the physical target you actually use; defaults are the repo's example.
+  marker_size: 0.20            # ArUco marker side length [m]
+  delta_width_qr_center: 0.55  # half horizontal distance between marker centers
+  delta_height_qr_center: 0.35 # half vertical distance between marker centers
+  delta_width_circles: 0.5     # horizontal distance between annulus centers
+  delta_height_circles: 0.4    # vertical distance between annulus centers
+  circle_radius: 0.12          # annulus centerline radius [m]
+  annulus_half_width: 0.025    # (outer_r - inner_r) / 2 [m]
+  board_width: 1.4
+  board_height: 1.0
+  board_roi_margin: 0.08
+  board_roi_depth: 0.12
+  auto_roi_voxel_leaf: 0.01
+  annulus_voxel_leaf: 0.005
+  min_detected_markers: 3
+
+# --- Vanjee LiDAR -----------------------------------------------------------
+# Vanjee mechanical spinning LiDAR. Sensor data endpoint (MSOP): 192.168.10.6:3001.
+# The driver publishes sensor_msgs/PointCloud2 with a `ring` field, so FAST-Calib2
+# auto-selects the mechanical-LiDAR pipeline. Set the topic the driver records to.
+  lidar_topic: "/vanjee_points"   # TODO: confirm against the Vanjee ROS driver
+
+# Automatic board ROI extraction. Leave true to skip manual passthrough tuning.
+# If auto-ROI fails for a scene, set false and tune the x/y/z window below.
+  use_auto_lidar_roi: true
+  x_min: 1.5
+  x_max: 5.0
+  y_min: -2.0
+  y_max: 2.0
+  z_min: -1.0
+  z_max: 2.0
+
+# --- I/O --------------------------------------------------------------------
+# image_path / bag_path / output_path are set by the launch file from the
+# cam:= and scene:= args, so they are intentionally omitted here.

@@ -1,0 +1,14 @@
+<launch>
+  <!-- Multi-scene joint calibration for one camera. Run AFTER collecting >=3
+       single-scene results via calib_cam.launch (each appends to
+       output/<cam>/circle_center_record.txt).
+
+         roslaunch fast_calib multi_calib_cam.launch cam:=cam0 -->
+
+  <arg name="cam" default="cam0"/>
+
+  <rosparam file="$(find fast_calib)/config/cameras/$(arg cam).yaml" command="load" subst_value="true"/>
+  <param name="output_path" value="$(find fast_calib)/output/$(arg cam)"/>
+
+  <node pkg="fast_calib" type="multi_fast_calib" name="multi_fast_calib" output="screen"/>
+</launch>

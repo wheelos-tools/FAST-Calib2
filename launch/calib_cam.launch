@@ -1,0 +1,28 @@
+<launch>
+  <!-- Single-scene LiDAR-camera calibration for one of the 5 cameras vs the
+       Vanjee LiDAR. Pick the camera and scene with args:
+
+         roslaunch fast_calib calib_cam.launch cam:=cam0 scene:=scene1
+
+       Data is read from calib_data/<cam>/<scene>/{image.png,cloud.bag}
+       Results are written to output/<cam>/. -->
+
+  <arg name="cam"   default="cam0"/>
+  <arg name="scene" default="scene1"/>
+  <arg name="rviz"  default="true"/>
+
+  <!-- Per-camera intrinsics, target geometry, LiDAR topic & ROI. -->
+  <rosparam file="$(find fast_calib)/config/cameras/$(arg cam).yaml" command="load" subst_value="true"/>
+
+  <!-- Per-camera / per-scene data wiring (overrides any paths in the yaml). -->
+  <param name="image_path"  value="$(find fast_calib)/calib_data/$(arg cam)/$(arg scene)/image.png"/>
+  <param name="bag_path"    value="$(find fast_calib)/calib_data/$(arg cam)/$(arg scene)/cloud.bag"/>
+  <param name="output_path" value="$(find fast_calib)/output/$(arg cam)"/>
+
+  <node pkg="fast_calib" type="fast_calib" name="fast_calib" output="screen"/>
+
+  <group if="$(arg rviz)">
+    <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz"
+          args="-d $(find fast_calib)/rviz_cfg/fast_livo2.rviz"/>
+  </group>
+</launch>
