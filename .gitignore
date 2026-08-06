@@ -3,3 +3,4 @@ output/*
 build/*
 docker/.ws_build/
 docker/.ws_devel/
+calib_env.sh

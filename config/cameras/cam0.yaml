@@ -1,24 +1,26 @@
 # ============================================================================
-# FAST-Calib2 per-camera config  --  cam0  vs  Vanjee LiDAR
+# FAST-Calib2 per-camera config  --  cam0  (car-ningde-orin)
 # ----------------------------------------------------------------------------
-# Copy/edit one of these per physical camera (cam0..cam4). The launch files
-# (calib_cam.launch / multi_calib_cam.launch) load this by `cam:=cam0`.
+# The launch files (calib_cam.launch / multi_calib_cam.launch) load this by
+# `cam:=cam0`.
 #
-#  >>> TODO: replace every value marked  # TODO  with this camera's real value.
-#      Until then the extrinsic result is meaningless.
+# Camera: Hikvision IP camera 192.168.1.64 (h265, 1920x1080@25),
+#   rtsp://<user>:<pass>@192.168.1.64:554/live  (credentials in calib_env.sh,
+#   which is intentionally not committed).
 # ============================================================================
 
 # --- Camera intrinsics (pinhole + radial/tangential distortion) -------------
-# TODO: paste this camera's calibrated intrinsics. Placeholder values below are
-#       only to keep the file parseable.
-  fx: 1000.0   # TODO
-  fy: 1000.0   # TODO
-  cx: 960.0    # TODO  (~ image_width / 2)
-  cy: 540.0    # TODO  (~ image_height / 2)
-  k1: 0.0      # TODO
-  k2: 0.0      # TODO
-  p1: 0.0      # TODO
-  p2: 0.0      # TODO
+# From /home/nvidia/02code/repo/intrinsics/intrinsics_cam64.yaml on the car
+# (chessboard runs of 2026-05-28, per-view mean reprojection 0.19-0.24 px).
+# k3 from that file is intentionally dropped: FAST-Calib2 uses k1 k2 p1 p2 only.
+  fx: 1377.0635762217391
+  fy: 1377.4551017572842
+  cx: 951.2976516161268
+  cy: 531.460884456436
+  k1: -0.4183635165414517
+  k2: 0.2197665412261714
+  p1: -0.00013234759027782485
+  p2: -0.00031309878007906026
 
 # --- Calibration target geometry --------------------------------------------
 # These describe the reflective annular board (see README section 2). Adjust to
@@ -38,11 +40,15 @@
   annulus_voxel_leaf: 0.005
   min_detected_markers: 3
 
-# --- Vanjee LiDAR -----------------------------------------------------------
-# Vanjee mechanical spinning LiDAR. Sensor data endpoint (MSOP): 192.168.10.6:3001.
-# The driver publishes sensor_msgs/PointCloud2 with a `ring` field, so FAST-Calib2
-# auto-selects the mechanical-LiDAR pipeline. Set the topic the driver records to.
-  lidar_topic: "/vanjee_points"   # TODO: confirm against the Vanjee ROS driver
+# --- LiDAR -------------------------------------------------------------------
+# car-ningde-orin has two Hesai AT128 (left=192.168.1.201, right=192.168.1.202)
+# and one Livox front, all published by the always-running production stack
+# (CYBER_DOMAIN_ID=80) -- no driver needs to be started for calibration.
+# AT128/Livox clouds are dense with non-uniform beams: record cloud.bag with
+# RING_FLAG=--no-ring so FAST-Calib2 uses the solid-state pipeline.
+# lidar_topic is the topic INSIDE cloud.bag (written by pcd_to_bag.py), NOT the
+# Cyber channel name (that is set via CH= for capture_scene.sh).
+  lidar_topic: "/lidar_points"
 
 # Automatic board ROI extraction. Leave true to skip manual passthrough tuning.
 # If auto-ROI fails for a scene, set false and tune the x/y/z window below.
