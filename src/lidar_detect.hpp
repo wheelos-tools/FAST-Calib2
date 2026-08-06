@@ -1535,8 +1535,13 @@ private:
         tree->setInputCloud(edge_cloud_);
 
         pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-        ec.setClusterTolerance(0.02);
-        ec.setMinClusterSize(200);
+        // AT128 beams are non-uniform: on this rig the rings land on scan lines
+        // ~0.087 m apart vertically, while distinct rings stay >=0.17 m apart,
+        // so the tolerance must sit between those (guide §4.2 direction, tuned
+        // from measured spacing). Min size 200->30: only ~250 pts per ring
+        // after voxel sampling.
+        ec.setClusterTolerance(0.12);
+        ec.setMinClusterSize(30);
         ec.setMaxClusterSize(50000);
         ec.setSearchMethod(tree);
         ec.setInputCloud(edge_cloud_);
