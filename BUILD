@@ -12,7 +12,17 @@ load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
-FAST_CALIB_COPTS = ["-std=c++17"]
+# The vendored FAST-Calib algorithm code predates Apollo's -Werror set; relax
+# the style-level warnings for these targets instead of patching validated
+# code (-Werror=return-type stays active).
+FAST_CALIB_COPTS = [
+    "-std=c++17",
+    "-Wno-sign-compare",
+    "-Wno-unused-variable",
+    "-Wno-unused-but-set-variable",
+    "-Wno-reorder",
+    "-Wno-switch",
+]
 
 cc_library(
     name = "fast_calib_lib",
