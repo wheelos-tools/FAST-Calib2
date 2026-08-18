@@ -105,7 +105,8 @@ int main(int argc, char** argv) {
   if (!scene_dir.empty()) {
     if (scene_dir.back() == '/') scene_dir.pop_back();
     params.image_path = scene_dir + "/image.png";
-    if (isDir(scene_dir + "/record"))
+    if (isDir(scene_dir + "/record") &&
+        !DataPreprocess::listRecordFiles(scene_dir + "/record").empty())
       params.cloud_path = scene_dir + "/record";
     else if (fileExists(scene_dir + "/cloud.pcd"))
       params.cloud_path = scene_dir + "/cloud.pcd";

@@ -106,14 +106,6 @@ class DataPreprocess {
     return true;
   }
 
- private:
-  bool ok_ = false;
-
-  static bool endsWith(const std::string& s, const std::string& suf) {
-    return s.size() >= suf.size() &&
-           s.compare(s.size() - suf.size(), suf.size(), suf) == 0;
-  }
-
   static bool isDirectory(const std::string& path) {
     DIR* d = opendir(path.c_str());
     if (d) closedir(d);
@@ -133,6 +125,14 @@ class DataPreprocess {
     closedir(d);
     std::sort(files.begin(), files.end());
     return files;
+  }
+
+ private:
+  bool ok_ = false;
+
+  static bool endsWith(const std::string& s, const std::string& suf) {
+    return s.size() >= suf.size() &&
+           s.compare(s.size() - suf.size(), suf.size(), suf) == 0;
   }
 
   bool loadFromRecords(const Params& params) {
