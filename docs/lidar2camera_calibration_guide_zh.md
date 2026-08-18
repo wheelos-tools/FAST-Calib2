@@ -147,17 +147,7 @@ FAST-Calib2 **直接读取 Apollo Cyber record 文件**（配置通道上的
 **融合 record 中的多帧**（`max_fusion_frames: 0` = 全部帧，默认值）。
 > 融合在**方位角**上加密每条扫描线，无法增加扫描线数（由波束数决定）。若板仍显稀疏，放近些。
 
-### 3.2 扫描线 ring 处理（配置项，而非转换）
-- **`ring`** = 雷达*扫描线序号*（**不是**板上的环）。有 ring 信息时，FAST-Calib2 用其
-  **机械**流程（沿每条扫描线找强度跳变）；没有时用**固态**流程（对高反环点聚类 → 拟合圆）。
-- Apollo 点云不带 `ring`。对**低线束机械**雷达（如 16 线），在相机配置里写入该雷达的
-  标称波束俯仰角表，加载器会依据各点俯仰角**合成** `ring`：
-  ```yaml
-  beam_altitudes_deg: [14, 12, 10, 8, 6, 4, 2, 0, -2, -4, -6, -8, -10, -12, -14, -16]
-  ```
-  对**稠密**雷达（如 128 线、非均匀波束），省略该键（固态流程，即原先的 `--no-ring`）。
-
-### 3.3 `--scene` 期望的数据布局
+### 3.2 `--scene` 期望的数据格式
 ```
 <REPO>/calib_data/<CAM>/<SCENE>/image.png
 <REPO>/calib_data/<CAM>/<SCENE>/record/rec.*   # 首选；或 cloud.pcd
@@ -166,7 +156,7 @@ FAST-Calib2 **直接读取 Apollo Cyber record 文件**（配置通道上的
 <REPO>/output/<CAM>/                        # 结果
 ```
 
-### 3.4 相机配置文件
+### 3.3 相机配置文件
 复制模板到 `config/cameras/<CAM>.yaml` 并填写：
 ```yaml
 # 内参（来自 §2.1）
