@@ -5,22 +5,25 @@ A complete, reproducible procedure for calibrating the rigid transform between a
 (2) data capture, (3) formatting the data, (4) calibration, (5) evaluation.
 
 Applies to any camera (RTSP / USB / recording) and any LiDAR (mechanical multi-line, solid-state,
-or Livox), whether point clouds come from a native ROS driver or **Apollo Cyber RT**.
+or Livox). Point clouds are read **natively from Apollo Cyber RT records**
+(`cyber_recorder` output) or from PCD files — no ROS anywhere in the pipeline.
 
-**Result:** `T_camera←lidar` = `(R, t)` such that `P_cam = R · P_lidar + t`.
+**Result:** `T_camera←lidar` = `(R, t)` such that `P_cam = R · P_lidar + t`
+(FAST-LIVO2 txt), plus an Apollo-convention extrinsics YAML (camera pose in
+the LiDAR frame) that drops into Apollo perception params.
 
 ---
 
 ## 0. How FAST-Calib2 works (mental model)
 
-- It runs **offline** on one `(image.png, cloud.bag)` pair per *scene* (one board placement).
+- It runs **offline** on one `(image.png, record/ or cloud.pcd)` pair per *scene* (one board placement).
 - The **camera** side detects 4 ArUco markers → board pose → the 4 ring centers (3D).
 - The **LiDAR** side extracts the 4 reflective-annulus centers (3D) directly from the cloud.
 - It solves the rigid transform that best aligns the two sets of 4 centers (SVD).
 - **Single scene** = one placement (sensitive). **Multi-scene** = ≥3 placements combined (robust).
 
 Placeholders used below: `<REPO>` = FAST-Calib2 root, `<CAM>` = a camera label, `<SCENE>` = a
-board placement label, `<IMG>` = the ROS container image `fast-calib2:noetic`.
+board placement label.
 
 ---
 
@@ -28,20 +31,28 @@ board placement label, `<IMG>` = the ROS container image `fast-calib2:noetic`.
 
 ### 1.1 Prerequisites
 - A machine that can reach the camera and LiDAR (the "host").
-- **Docker** (for the ROS Noetic build container — no ROS needed on the host).
+- Either a **running Apollo dev container** (primary build) or
+  `libpcl-dev libopencv-dev libeigen3-dev cmake` (fallback build).
 - **ffmpeg** (RTSP frame grab), **git**, **python3** with `pip`.
 - A **reflective annular calibration target** (FAST-Calib2 board: 4 ArUco markers `DICT_6X6_250`
   + 4 retro-reflective annuli). Measure and record its real dimensions.
 
-### 1.2 Get FAST-Calib2 and build the container
+### 1.2 Get FAST-Calib2 and build
 ```bash
 git clone https://github.com/wheelos-tools/FAST-Calib2.git <REPO>
 cd <REPO>
-docker/build.sh        # builds fast-calib2:noetic and compiles the workspace into docker/.ws_devel
+
+# Primary: build inside the Apollo dev environment via apollo.sh (bazel),
+# scoped to this module only — uses Apollo's own pcl/opencv/eigen modules.
+APOLLO_HOST=/path/to/apollo scripts/apollo_build.sh
+# env knobs: APOLLO_C=<container> APOLLO_USER=nvidia APOLLO_BUILD_CMD=build_opt
+
+# Fallback: plain CMake against system PCL/OpenCV/Eigen
+mkdir -p build && cd build && cmake .. && make -j
 ```
-The container carries PCL + OpenCV + ROS Noetic; compiled binaries persist in `docker/.ws_devel/`
-across `docker run --rm`. Re-run `docker/build.sh` (or just `catkin_make` in the container) after
-any C++ change.
+Both produce `build/{fast_calib, multi_fast_calib, lidar_center_test}`.
+Re-run the same command after any C++ change (the first Apollo build compiles
+PCL/OpenCV once from source; afterwards it is incremental and fast).
 
 ### 1.3 Host Python dependencies (for the helper scripts)
 ```bash
@@ -56,10 +67,10 @@ python3 -m pip install --user open3d opencv-python numpy
 ### 1.4 Helper scripts (`<REPO>/scripts/`)
 | Script | Role |
 |---|---|
-| `capture_scene.sh` | grab a camera frame + record/fuse the LiDAR → `image.png`, `cloud.pcd`, `cloud.bag` |
-| `record_to_pcd.py` | fuse N static frames from a source record → dense ASCII PCD |
-| `pcd_to_bag.py` | PCD → ROS bag; synthesizes a `ring` field for mechanical LiDARs |
-| `pick_roi.py` | Open3D interactive board-ROI picker; `--yaml` writes it into the config |
+| `apollo_build.sh` | build the binaries inside the Apollo dev container (scoped `apollo.sh` bazel build) |
+| `capture_scene.sh` | grab a camera frame + record the LiDAR → `image.png`, `record/rec.*`, `cloud.pcd` |
+| `record_to_pcd.py` | fuse N static frames from a source record → dense ASCII PCD (viewing/ROI-picking; the binaries fuse records themselves) |
+| `pick_roi.py` | Open3D interactive board-ROI picker; `--yaml` writes it into the config, and its `cloud_roi.txt` is auto-applied per scene |
 | `overlay_reproj.py` / `render_scene_qa.py` | reprojection overlay (+ colored PCD) for QA |
 | `multi_capture.sh` / `pick_multi_roi.sh` | one-command multi-scene runs (auto- / hand-ROI) |
 
@@ -115,18 +126,20 @@ Place the board so **both** sensors see it clearly:
   reflective returns off the board plane (see §4.2). Vary board **position** as much as tilt.
 
 ### 2.3 Capture one scene
-`capture_scene.sh` grabs one RTSP frame and records + fuses the LiDAR into a bag:
+`capture_scene.sh` grabs one RTSP frame and records the LiDAR channel:
 ```bash
 RTSP=rtsp://user:pass@host:554/live APOLLO_C=<apollo_container> \
-CH=/apollo/sensor/<lidar>/PointCloud2 TOPIC=/lidar_points FRAME=<lidar_frame> \
-RING_FLAG=<--no-ring for dense/solid | empty to synthesize ring> \
-  scripts/capture_scene.sh <CAM> <SCENE> 5     # 5 seconds (~ tens of frames fused)
+CH=/apollo/sensor/<lidar>/PointCloud2 \
+  scripts/capture_scene.sh <CAM> <SCENE> 5     # 5 seconds (~ tens of frames)
 ```
-Output → `<REPO>/calib_data/<CAM>/<SCENE>/{image.png, cloud.pcd, cloud.bag}`.
+Output → `<REPO>/calib_data/<CAM>/<SCENE>/{image.png, record/rec.*, cloud.pcd}`.
+The raw cyber record is the calibration input (the binary fuses its frames
+itself); `cloud.pcd` only feeds the ROI picker and QA scripts.
 **Always eyeball `image.png`** — the whole board (4 markers + 4 rings) must be crisp and unclipped.
 
-**Native ROS alternative:** `rosbag record -O .../cloud.bag <TOPIC> --duration=5` (keeps a real
-`ring` field natively), then place a frame at `.../image.png`.
+**Manual alternative:** `cyber_recorder record -c <channel>` into
+`.../record/`, plus any camera frame at `.../image.png`. A `cloud.pcd`
+(x y z intensity) works as the cloud source too.
 
 ### 2.4 Multi-scene
 Repeat §2.3 for **≥3 board poses** (e.g. forward, tilted left, tilted right, and/or moved
@@ -134,39 +147,40 @@ left/center/right). The orchestrators in §4.4 automate this.
 
 ---
 
-# 3. Convert the data into calibration format
+# 3. Data format
 
-FAST-Calib2 reads a **ROS bag** with `sensor_msgs/PointCloud2` (or Livox `CustomMsg`). If your
-source is native ROS, you already have it. For **Apollo/Cyber or other non-ROS sources**,
-`capture_scene.sh` runs these two steps for you; here they are explicitly:
+FAST-Calib2 reads point clouds **natively from Apollo Cyber record files**
+(`apollo.drivers.PointCloud` on the configured channel) or from a **PCD**
+(x y z intensity, `ring` column honored). No conversion step exists anymore —
+frame fusion and ring handling happen inside the binary:
 
-### 3.1 Fuse frames → dense PCD
-A single frame of a sparse LiDAR is often below FAST-Calib2's point-count guards. The board and
-LiDAR are static during capture, so **fuse many frames**:
-```bash
-python3 scripts/record_to_pcd.py --record-glob '<record_dir>/*' \
-        --channel /apollo/sensor/<lidar>/PointCloud2 --out cloud.pcd --max-frames 20
-```
+### 3.1 Frame fusion (automatic)
+A single frame of a sparse LiDAR is often below FAST-Calib2's point-count
+guards. The board and LiDAR are static during capture, so the loader **fuses
+the record's frames** (`max_fusion_frames: 0` = all frames, the default).
 > Fusion densifies each scan line **azimuthally**; it cannot add scan lines (fixed by beam count).
 > If the board still looks under-sampled, move it closer.
 
-### 3.2 PCD → ROS bag (+ ring for mechanical LiDARs)
-```bash
-python3 scripts/pcd_to_bag.py --pcd cloud.pcd --bag cloud.bag \
-        --topic /lidar_points --frame <lidar_frame> [--no-ring]
-```
-- **`ring`** = the LiDAR *scan-line index* (NOT the board rings). If the bag has a `ring` field,
-  FAST-Calib2 uses its **mechanical** pipeline (walks each scan line for intensity transitions);
-  without it, the **solid** pipeline (clusters bright annulus points → fits circles).
-- Apollo clouds carry no `ring`. For a **low-line mechanical** LiDAR (e.g. 16-line), `pcd_to_bag`
-  **synthesizes** `ring` from each point's elevation vs the nominal beam table → better extraction.
-  For a **dense** LiDAR (e.g. 128-line, non-uniform beams), use **`--no-ring`** (solid pipeline).
+### 3.2 Scan-ring handling (config, not conversion)
+- **`ring`** = the LiDAR *scan-line index* (NOT the board rings). With ring
+  information FAST-Calib2 uses its **mechanical** pipeline (walks each scan
+  line for intensity transitions); without it, the **solid** pipeline
+  (clusters bright annulus points → fits circles).
+- Apollo clouds carry no `ring`. For a **low-line mechanical** LiDAR
+  (e.g. 16-line), set the sensor's nominal beam table in the camera config —
+  the loader synthesizes `ring` from each point's elevation:
+  ```yaml
+  beam_altitudes_deg: [14, 12, 10, 8, 6, 4, 2, 0, -2, -4, -6, -8, -10, -12, -14, -16]
+  ```
+  For a **dense** LiDAR (e.g. 128-line, non-uniform beams), omit the key
+  (solid pipeline — the old `--no-ring`).
 
-### 3.3 Data layout expected by the launch files
+### 3.3 Data layout expected by `--scene`
 ```
 <REPO>/calib_data/<CAM>/<SCENE>/image.png
-<REPO>/calib_data/<CAM>/<SCENE>/cloud.bag
-<REPO>/config/cameras/<CAM>.yaml          # intrinsics + board geometry + topic + ROI
+<REPO>/calib_data/<CAM>/<SCENE>/record/rec.*   # preferred; or cloud.pcd
+<REPO>/calib_data/<CAM>/<SCENE>/cloud_roi.txt  # optional, auto-applied manual ROI
+<REPO>/config/cameras/<CAM>.yaml          # intrinsics + board geometry + channel + ROI
 <REPO>/output/<CAM>/                        # results
 ```
 
@@ -185,10 +199,23 @@ Copy the template to `config/cameras/<CAM>.yaml` and fill:
   circle_radius: 0.12           # annulus centerline radius [m]
   annulus_half_width: 0.025
   min_detected_markers: 3
-# lidar
-  lidar_topic: "/lidar_points"
+# lidar source
+  lidar_channel: "/apollo/sensor/<lidar>/PointCloud2"
+  lidar_frame: "<lidar_frame>"   # frame names for the Apollo extrinsics YAML
+  camera_frame: "<CAM>"
+  max_fusion_frames: 0           # 0 = fuse all frames in the record
+  # beam_altitudes_deg: [...]    # only for low-line mechanical LiDARs (§3.2)
   use_auto_lidar_roi: true      # try true first; false + a manual box if it fails (§4.1)
   x_min: ...  x_max: ...  y_min: ...  y_max: ...  z_min: ...  z_max: ...
+# detector tuning (optional; defaults shown — per-rig values live here now,
+# not in source patches; see §4.2)
+  # board_plane_inlier_threshold: 0.07
+  # annulus_plane_inlier_threshold: 0.07
+  # boundary_plane_inlier_threshold: 0.03
+  # annulus_cluster_tolerance: 0.10
+  # annulus_cluster_min_size: 30
+  # mech_cluster_tolerance: 0.09
+  # mech_cluster_min_size: 80
 ```
 
 ---
@@ -211,35 +238,34 @@ FAST-Calib2 must isolate the board points.
 
 ### 4.2 Run single-scene
 ```bash
-docker run --rm --net=host \
-  -v "<REPO>:/root/calib_ws/src/fast_calib" \
-  -v "<REPO>/docker/.ws_build:/root/calib_ws/build" \
-  -v "<REPO>/docker/.ws_devel:/root/calib_ws/devel" \
-  <IMG> bash -lc "roslaunch fast_calib calib_cam.launch cam:=<CAM> scene:=<SCENE> rviz:=false"
+./build/fast_calib --config config/cameras/<CAM>.yaml \
+                   --scene calib_data/<CAM>/<SCENE> --output output/<CAM> \
+                   [--debug-dir output/<CAM>/debug_<SCENE>]
 ```
-(The node prints the result then loops for RViz — wrap in `timeout 90` or Ctrl-C once
-`[Result] RMSE` and `Saved four pairs of target centers` appear.) Result →
-`output/<CAM>/single_calib_result.txt`.
+The binary prints the result and **exits** (0 = ok, 2 = detection failed);
+`--debug-dir` writes every intermediate cloud as a PCD (replaces the former
+RViz topics). Result → `output/<CAM>/single_calib_result.txt` +
+`single_calib_extrinsics.yaml`.
 
 **A good run shows:** camera `4 centers found`; LiDAR `4 edge/annulus clusters` with concentric
 fits at your board's inner/outer radii; `[Result] RMSE: 0.00xx m`.
 
-**Tuning for hard clouds** (edit `src/lidar_detect.hpp`, rebuild):
-- *Sparse 16-line, `boundary clusters: 0`* → lower `clusterMechanicalAnnulusBoundaryCloud`'s
-  `setMinClusterSize` (80→~20), raise `setClusterTolerance` (0.09→~0.13).
-- *Dense non-uniform (AT128), only 2 of 4 clusters* → lower `clusterAnnulusCloud`'s
-  `setMinClusterSize` (200→~30), raise tolerance (0.02→~0.06).
+**Tuning for hard clouds** (set in the camera config — no source edits or rebuild):
+- *Sparse 16-line, `boundary clusters: 0`* → `mech_cluster_min_size: 20`,
+  `mech_cluster_tolerance: 0.13`.
+- *Dense non-uniform (AT128), only 2 of 4 clusters* →
+  `annulus_cluster_min_size: 30`, `annulus_cluster_tolerance: 0.06–0.10`.
 - *Bright annulus points "off-plane"/excluded* → tighten the ROI so RANSAC fits the board (best),
-  or widen the plane-inlier thresholds (`0.015`/`0.03`).
+  or widen `board_plane_inlier_threshold` / `annulus_plane_inlier_threshold`
+  (saturated retro-tape returns can bloom several cm off-plane).
 
 ### 4.3 Run multi-scene (recommended)
 Each single-scene run appends 4 center-pairs to `output/<CAM>/circle_center_record.txt`; the joint
 step reads the last ≥3:
 ```bash
 # after ≥3 successful single-scene runs:
-docker run --rm --net=host -v ... <IMG> \
-  bash -lc "roslaunch fast_calib multi_calib_cam.launch cam:=<CAM>"
-# -> output/<CAM>/multi_calib_result.txt
+./build/multi_fast_calib --config config/cameras/<CAM>.yaml --output output/<CAM>
+# -> output/<CAM>/multi_calib_result.txt + multi_calib_extrinsics.yaml
 ```
 
 ### 4.4 One-command orchestrators
@@ -321,17 +347,20 @@ python3 intrinsic_board_check.py <image.png> fx fy cx cy k1 k2 p1 p2
 
 ```bash
 # 0. build + deps (once)
-cd <REPO> && docker/build.sh
+cd <REPO> && APOLLO_HOST=/path/to/apollo scripts/apollo_build.sh
 python3 -m pip install --user cyber_record protobuf==3.19.4 open3d opencv-python numpy
 
-# 1. intrinsics -> config/cameras/<CAM>.yaml   (chessboard, §2.1)
+# 1. intrinsics -> config/cameras/<CAM>.yaml   (chessboard, §2.1); set
+#    lidar_channel / lidar_frame / camera_frame in the same config (§3.4)
 
 # 2-4. capture 3 angles + calibrate + QA, all in one:
-CH=/apollo/sensor/<lidar>/PointCloud2 TOPIC=/lidar_points FRAME=<frame> RING_FLAG=--no-ring \
+CH=/apollo/sensor/<lidar>/PointCloud2 \
 LIDAR_LAUNCH=/apollo/modules/drivers/lidar/<drv>/launch/<drv>.launch \
   scripts/multi_capture.sh <CAM> 3 5
 #   (tilted boards: use scripts/pick_multi_roi.sh <CAM>_<date> instead)
 
-# 5. inspect output/<CAM>_<date>/: multi_calib_result.txt, reproj_scene{1,2,3}.png,
+# 5. inspect output/<CAM>_<date>/: multi_calib_result.txt,
+#    multi_calib_extrinsics.yaml (Apollo convention: camera pose in the LiDAR
+#    frame — drop-in for perception params), reproj_scene{1,2,3}.png,
 #    colored_scene{1,2,3}.pcd
 ```

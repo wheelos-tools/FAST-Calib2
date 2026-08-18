@@ -22,7 +22,8 @@ FAST-Calib2 extends [FAST-Calib](https://github.com/hku-mars/FAST-Calib) to LiDA
 ## 📖 Documentation
 
 - **[Detailed LiDAR↔Camera calibration guide](docs/lidar2camera_calibration_guide.md)** ([中文](docs/lidar2camera_calibration_guide_zh.md)) — end-to-end: environment setup, data capture, formatting, calibration, and evaluation, including Apollo/Cyber sources, multi-scene, and troubleshooting.
-- **[Capture & QA helper scripts](scripts/README_lidar2cam_capture.md)** — `capture_scene.sh`, `record_to_pcd.py`, `pcd_to_bag.py`, `pick_roi.py`, `overlay_reproj.py` / `render_scene_qa.py`, `multi_capture.sh` / `pick_multi_roi.sh`, `intrinsic_board_check.py`.
+- **[Capture & QA helper scripts](scripts/README_lidar2cam_capture.md)** — `capture_scene.sh`, `apollo_build.sh`, `record_to_pcd.py`, `pick_roi.py`, `overlay_reproj.py` / `render_scene_qa.py`, `multi_capture.sh` / `pick_multi_roi.sh`, `intrinsic_board_check.py`.
+- **[What changed in the ROS-free refactor](docs/ros_free_changes.md)** — team-facing summary: Apollo-native input, build, migration notes, validation.
 
 ## 1. Prerequisites & Build
 
@@ -87,34 +88,86 @@ Mechanical LiDAR pipeline:
 
 The final quality checks include center-to-center geometry error and annulus radius consistency.
 
-## 4. Run Examples
+## 4. Quickstart: extrinsic calibration workflow
 
-Prepare static acquisition data per scene in
-`calib_data/<cam>/<scene>/`:
+The steps below are the complete LiDAR↔camera workflow; the
+[detailed guide](docs/lidar2camera_calibration_guide.md) expands each one.
 
-- `image.png` — the camera frame
-- `record/` — cyber record file(s) of the LiDAR channel, **or** `cloud.pcd`
-- optional `cloud_roi.txt` (from `scripts/pick_roi.py`) — auto-applied manual ROI
+**Step 1 — Build** (once; see §1 for both options):
 
-Run single-scene calibration:
+```bash
+APOLLO_HOST=/path/to/apollo scripts/apollo_build.sh   # Apollo env (bazel)
+# or:  mkdir -p build && cd build && cmake .. && make -j
+```
+
+**Step 2 — Per-camera config.** Copy `config/cameras/_template.yaml` to
+`config/cameras/<cam>.yaml` and fill in the camera intrinsics (calibrate this
+exact camera first — a wrong focal length shifts the extrinsic translation),
+the measured board geometry, and the LiDAR source:
+
+```yaml
+lidar_channel: "/apollo/sensor/<lidar>/PointCloud2"  # cyber record channel
+lidar_frame: "<lidar_frame>"    # frame names used in the Apollo extrinsics YAML
+camera_frame: "<cam>"
+max_fusion_frames: 0            # 0 = fuse the whole record (scene is static)
+beam_altitudes_deg: [...]       # ONLY for low-line mechanical LiDARs; omit for
+                                # dense/solid (AT128, Livox) -> solid pipeline
+```
+
+**Step 3 — Capture a scene** (one board placement seen sharply by both
+sensors). `scripts/capture_scene.sh` grabs an RTSP frame and records the
+Apollo channel; or assemble the layout by hand:
+
+```
+calib_data/<cam>/<scene>/image.png       # camera frame
+calib_data/<cam>/<scene>/record/rec.*    # cyber record file(s)  (or cloud.pcd)
+```
+
+**Step 4 — Board ROI.** Try `use_auto_lidar_roi: true` first. If the auto ROI
+fails (sparse cloud, other retroreflectors, wall behind the board), pick a
+tight manual box on the board:
+
+```bash
+python3 scripts/pick_roi.py calib_data/<cam>/<scene>/cloud.pcd --yaml config/cameras/<cam>.yaml
+# also writes calib_data/<cam>/<scene>/cloud_roi.txt, auto-applied per scene
+```
+
+**Step 5 — Single-scene calibration** (repeat steps 3–5 for **≥3 board
+poses**; each successful run appends its center pairs to
+`output/<cam>/circle_center_record.txt`):
 
 ```bash
 ./build/fast_calib --config config/cameras/<cam>.yaml \
                    --scene calib_data/<cam>/<scene> --output output/<cam>
-# containerized: docker/run.sh <cam> <scene>
+# a good run: camera "4 centers found", LiDAR 4 concentric annuli at the
+# board radii, [Result] RMSE of a few mm; exit code 0
 ```
 
-After collecting at least three scenes, run multi-scene joint calibration:
+**Step 6 — Multi-scene joint fit** (uses the last 3 recorded scenes):
 
 ```bash
 ./build/multi_fast_calib --config config/cameras/<cam>.yaml --output output/<cam>
-# containerized: docker/run_multi.sh <cam>
 ```
 
-Results: `single_calib_result.txt` / `multi_calib_result.txt` (FAST-LIVO2
-format) plus `single_calib_extrinsics.yaml` / `multi_calib_extrinsics.yaml`
-(Apollo transform format, `P_cam = R · P_lidar + t`). `--debug-dir <dir>`
-writes every intermediate cloud as a PCD (replaces the former RViz topics).
+**Step 7 — Evaluate** before trusting the result: reproject the LiDAR into
+every scene's image — the high-intensity (red) points must land on the 4 white
+rings in **all** scenes:
+
+```bash
+python3 scripts/render_scene_qa.py calib_data/<cam>/<scene> \
+        output/<cam>/multi_calib_result.txt --config config/cameras/<cam>.yaml \
+        --overlay output/<cam>/reproj_<scene>.png
+```
+
+**Outputs** in `output/<cam>/`: `single_calib_result.txt` /
+`multi_calib_result.txt` (FAST-LIVO2 format, `T_cam_lidar`) and
+`single_calib_extrinsics.yaml` / `multi_calib_extrinsics.yaml` (Apollo
+convention: LiDAR as parent frame, camera as child — the camera pose in the
+LiDAR frame, drop-in for Apollo perception params). `--debug-dir <dir>` writes
+every intermediate cloud as a PCD (replaces the former RViz topics).
+
+One-command orchestration of steps 3–7: `scripts/multi_capture.sh` (auto-ROI)
+or `scripts/pick_multi_roi.sh` (hand-picked ROI per scene).
 
 Typical multi-scene target placement:
 

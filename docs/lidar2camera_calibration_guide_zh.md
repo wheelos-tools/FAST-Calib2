@@ -1,5 +1,13 @@
 # 激光雷达 ↔ 相机 外参标定 —— 详细指南（FAST-Calib2）
 
+> **⚠️ 本中文指南编写于 ROS 版流程，尚未随 ROS-free 重构更新。**
+> 现在的流程：不再需要 ROS / rosbag / roslaunch —— 点云直接读取 Apollo Cyber
+> record（或 PCD），编译在 Apollo 环境内完成（`scripts/apollo_build.sh`，或
+> CMake 后备方案），运行方式为 `./build/fast_calib --config ... --scene ...`。
+> 请以 [英文指南](lidar2camera_calibration_guide.md)、README 的 Quickstart 与
+> [ros_free_changes.md](ros_free_changes.md) 为准；本文档中标定板制作、摆放、
+> 精度评估等与代码无关的章节仍然有效。
+
 使用 FAST-Calib2 的反光环形标定板方案，标定**相机**与**激光雷达**之间刚体变换的完整可复现流程。
 涵盖：(1) 环境搭建，(2) 数据采集，(3) 数据格式转换，(4) 标定，(5) 结果评估。
 
