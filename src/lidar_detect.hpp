@@ -25,6 +25,11 @@ private:
     double board_width_, board_height_, board_roi_margin_, board_roi_depth_;
     double auto_roi_voxel_leaf_, annulus_voxel_leaf_;
     bool use_auto_lidar_roi_;
+    double board_plane_inlier_threshold_, annulus_plane_inlier_threshold_;
+    double boundary_plane_inlier_threshold_;
+    double annulus_cluster_tolerance_, mech_cluster_tolerance_;
+    int annulus_cluster_min_size_, mech_cluster_min_size_;
+    int auto_roi_cluster_min_size_;
 
     // 存储中间结果的点云
     pcl::PointCloud<Common::Point>::Ptr filtered_cloud_;
@@ -1235,7 +1240,7 @@ private:
         std::vector<pcl::PointIndices> cluster_indices;
         pcl::EuclideanClusterExtraction<Common::Point> ec;
         ec.setClusterTolerance(0.035);
-        ec.setMinClusterSize(200);
+        ec.setMinClusterSize(auto_roi_cluster_min_size_);
         ec.setMaxClusterSize(60000);
         ec.setSearchMethod(tree);
         ec.setInputCloud(high_cloud);
@@ -1361,10 +1366,11 @@ private:
             return false;
         }
 
-        // 0.015 -> 0.07: AT128 saturated retro-tape returns bloom 2-7 cm off the
-        // board plane (measured on car-ningde-orin); a 1.5 cm gate silently
-        // drops most ring points (guide §4.2 "亮环点离面被剔除").
-        extractPlaneInliers(filtered_cloud_, plane_coefficients, plane_cloud_, 0.07);
+        // Loose default (0.07): saturated retro-tape returns bloom several cm
+        // off the board plane on some LiDARs (e.g. AT128); tighten/relax via
+        // board_plane_inlier_threshold in the camera config.
+        extractPlaneInliers(filtered_cloud_, plane_coefficients, plane_cloud_,
+                            board_plane_inlier_threshold_);
         LOG_INFO("Plane cloud size: %zu", plane_cloud_->size());
         if (plane_cloud_->size() < 500)
         {
@@ -1428,9 +1434,7 @@ private:
                                                  const PlaneAlignment& alignment)
     {
         annulus_original_cloud_->clear();
-        // 0.03 -> 0.07: match the relaxed plane gate above; saturated ring
-        // returns sit up to ~6 cm off-plane on the AT128.
-        const double plane_distance_threshold = 0.07;
+        const double plane_distance_threshold = annulus_plane_inlier_threshold_;
         if (!extractHighIntensityPointsNearPlane(plane_cloud_, plane_coefficients,
                                                  plane_distance_threshold,
                                                  annulus_original_cloud_, "Annulus"))
@@ -1469,7 +1473,7 @@ private:
                                     bool interpolate_boundary = true)
     {
         annulus_original_cloud_->clear();
-        const double plane_distance_threshold = 0.03;
+        const double plane_distance_threshold = boundary_plane_inlier_threshold_;
         if (!extractRingIntensityBoundaryPointsNearPlane(plane_cloud_, plane_coefficients,
                                                          plane_distance_threshold,
                                                          annulus_original_cloud_, "Annulus",
@@ -1537,13 +1541,11 @@ private:
         tree->setInputCloud(edge_cloud_);
 
         pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-        // AT128 beams are non-uniform: on this rig the rings land on scan lines
-        // up to ~0.087 m apart (board at 6 m), while distinct rings merge once
-        // the tolerance reaches ~0.12 (board at 2.5 m), so the workable window
-        // measured across both ranges is 0.09-0.11 (guide §4.2 direction).
-        // Min size 200->30: only ~250 pts per ring after voxel sampling.
-        ec.setClusterTolerance(0.10);
-        ec.setMinClusterSize(30);
+        // Sparse-on-board LiDARs (non-uniform AT128 beams, low line counts)
+        // need a wider tolerance / smaller min size than dense clouds; set
+        // annulus_cluster_{tolerance,min_size} per rig in the camera config.
+        ec.setClusterTolerance(annulus_cluster_tolerance_);
+        ec.setMinClusterSize(annulus_cluster_min_size_);
         ec.setMaxClusterSize(50000);
         ec.setSearchMethod(tree);
         ec.setInputCloud(edge_cloud_);
@@ -1560,8 +1562,8 @@ private:
         tree->setInputCloud(edge_cloud_);
 
         pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-        ec.setClusterTolerance(0.09);
-        ec.setMinClusterSize(80);
+        ec.setClusterTolerance(mech_cluster_tolerance_);
+        ec.setMinClusterSize(mech_cluster_min_size_);
         ec.setMaxClusterSize(60000);
         ec.setSearchMethod(tree);
         ec.setInputCloud(edge_cloud_);
@@ -1858,6 +1860,14 @@ public:
         auto_roi_voxel_leaf_ = params.auto_roi_voxel_leaf;
         annulus_voxel_leaf_ = params.annulus_voxel_leaf;
         use_auto_lidar_roi_ = params.use_auto_lidar_roi;
+        board_plane_inlier_threshold_ = params.board_plane_inlier_threshold;
+        annulus_plane_inlier_threshold_ = params.annulus_plane_inlier_threshold;
+        boundary_plane_inlier_threshold_ = params.boundary_plane_inlier_threshold;
+        annulus_cluster_tolerance_ = params.annulus_cluster_tolerance;
+        annulus_cluster_min_size_ = params.annulus_cluster_min_size;
+        mech_cluster_tolerance_ = params.mech_cluster_tolerance;
+        mech_cluster_min_size_ = params.mech_cluster_min_size;
+        auto_roi_cluster_min_size_ = params.auto_roi_cluster_min_size;
     }
 
     // 处理机械式 LiDAR 点云并提取 4 个 annulus 中心

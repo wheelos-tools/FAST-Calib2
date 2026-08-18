@@ -48,6 +48,17 @@ struct Params {
   std::string lidar_frame = "lidar";
   std::string camera_frame = "camera";
 
+  // LiDAR-detector tuning (was: hard-coded in lidar_detect.hpp; per-rig values
+  // now live in the camera config). Defaults keep the committed behavior.
+  double board_plane_inlier_threshold = 0.07;     // board plane gate [m]
+  double annulus_plane_inlier_threshold = 0.07;   // solid: bright-ring gate [m]
+  double boundary_plane_inlier_threshold = 0.03;  // mech: ring-boundary gate [m]
+  double annulus_cluster_tolerance = 0.10;        // solid annulus clustering
+  int annulus_cluster_min_size = 30;
+  double mech_cluster_tolerance = 0.09;           // mech boundary clustering
+  int mech_cluster_min_size = 80;
+  int auto_roi_cluster_min_size = 200;            // auto-ROI board clustering
+
   const std::string& channel() const {
     return lidar_channel.empty() ? lidar_topic : lidar_channel;
   }
@@ -208,6 +219,16 @@ inline Params loadParameters(const std::string& config_path) {
   kv.get("beam_altitudes_deg", p.beam_altitudes_deg);
   kv.get("lidar_frame", p.lidar_frame, "lidar");
   kv.get("camera_frame", p.camera_frame, "camera");
+  kv.get("board_plane_inlier_threshold", p.board_plane_inlier_threshold, 0.07);
+  kv.get("annulus_plane_inlier_threshold", p.annulus_plane_inlier_threshold,
+         0.07);
+  kv.get("boundary_plane_inlier_threshold", p.boundary_plane_inlier_threshold,
+         0.03);
+  kv.get("annulus_cluster_tolerance", p.annulus_cluster_tolerance, 0.10);
+  kv.get("annulus_cluster_min_size", p.annulus_cluster_min_size, 30);
+  kv.get("mech_cluster_tolerance", p.mech_cluster_tolerance, 0.09);
+  kv.get("mech_cluster_min_size", p.mech_cluster_min_size, 80);
+  kv.get("auto_roi_cluster_min_size", p.auto_roi_cluster_min_size, 200);
   return p;
 }
 
