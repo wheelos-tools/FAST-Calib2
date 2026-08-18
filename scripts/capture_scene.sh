@@ -1,19 +1,16 @@
 #!/usr/bin/env bash
 # Capture one calibration scene for FAST-Calib2:
-#   - grab one camera frame (RTSP)         -> calib_data/<cam>/<scene>/image.png
-#   - record LiDAR clouds, fuse frames,    -> calib_data/<cam>/<scene>/cloud.bag
-#     and wrap into a ROS bag (topic $TOPIC, ring synthesized for mech LiDARs)
+#   - grab one camera frame (RTSP)      -> calib_data/<cam>/<scene>/image.png
+#   - record the LiDAR channel          -> calib_data/<cam>/<scene>/record/rec.*
+#   - fuse frames into a viewing PCD    -> calib_data/<cam>/<scene>/cloud.pcd
 #
-# This is an EXAMPLE for an Apollo Cyber RT LiDAR source (records with
-# cyber_recorder inside the Apollo container, then converts). For a native ROS
-# LiDAR just `rosbag record` the topic instead; the FAST-Calib2 side is identical.
+# fast_calib reads the cyber record directly (set lidar_channel in the camera
+# config); cloud.pcd only feeds pick_roi.py / the QA scripts. No ROS anywhere.
 #
 # Configure via env (no secrets are baked in):
 #   RTSP=rtsp://user:pass@host:554/live   # camera stream (required)
 #   APOLLO_C=<apollo_container_name>       # running Apollo container (required)
 #   CH=/apollo/sensor/<lidar>/PointCloud2  # source LiDAR channel (required)
-#   TOPIC=/lidar_points  FRAME=lidar       # output bag topic / frame_id
-#   ROS_IMG=fast-calib2:noetic  RING_FLAG= # (--no-ring for solid pipeline)
 #
 # Usage:  capture_scene.sh <cam> <scene> [seconds]
 set -euo pipefail
@@ -25,10 +22,6 @@ SECS="${3:-5}"
 RTSP="${RTSP:?set RTSP=rtsp://user:pass@host:554/live}"
 APOLLO_C="${APOLLO_C:?set APOLLO_C=<running apollo container name>}"
 CH="${CH:?set CH=/apollo/sensor/<lidar>/PointCloud2}"
-TOPIC="${TOPIC:-/lidar_points}"
-FRAME="${FRAME:-lidar}"
-ROS_IMG="${ROS_IMG:-fast-calib2:noetic}"
-RING_FLAG="${RING_FLAG:-}"                 # set --no-ring for the solid pipeline
 
 # repo root = parent of this script's dir; helper scripts live beside this one
 TOOLS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

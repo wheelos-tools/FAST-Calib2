@@ -12,8 +12,8 @@
 #
 # It auto-starts the LiDAR driver (via cyber_launch, as the nvidia user) inside the Apollo
 # container if the point-cloud channel isn't already live. LiDAR source defaults to the Hesai
-# AT128; override via env (CH / TOPIC / FRAME / RING_FLAG / LIDAR_LAUNCH / LIDAR_USER) for a
-# different sensor, e.g. LIDAR_LAUNCH=/apollo/modules/drivers/lidar/vanjeelidar/launch/vanjeelidar.launch
+# AT128; override via env (CH / LIDAR_LAUNCH / LIDAR_USER) for a different sensor,
+# e.g. LIDAR_LAUNCH=/apollo/modules/drivers/lidar/vanjeelidar/launch/vanjeelidar.launch
 set -uo pipefail
 
 BASE="${1:-cam0}"
@@ -25,11 +25,9 @@ REPO="$(cd "$TOOLS/.." && pwd)"                          # FAST-Calib2 root
 IMG="${ROS_IMG:-fast-calib2:noetic}"
 PY="${PYTHON:-python3}"                     # must have open3d + opencv for QA rendering
 
-# capture source (Hesai AT128 defaults; export before running to use another lidar)
+# capture source (Hesai AT128 default; export before running to use another lidar).
+# Ring handling now lives in the camera config (beam_altitudes_deg => mech pipeline).
 export CH="${CH:-/apollo/sensor/hesai/main_front/PointCloud2}"
-export TOPIC="${TOPIC:-/hesai_points}"
-export FRAME="${FRAME:-hesai_main_front}"
-export RING_FLAG="${RING_FLAG:---no-ring}"
 APOLLO_C="${APOLLO_C:-$(docker ps --format '{{.Names}}' | grep -m1 apollo_dev)}"
 export APOLLO_C
 # LiDAR driver to auto-start if the channel isn't already live (match the source above).
@@ -81,7 +79,7 @@ fi
 
 echo "[multi] result id : $CAM"
 echo "[multi] angles    : $N   (>=3 needed for the joint fit)"
-echo "[multi] lidar      : $CH  (ring: ${RING_FLAG:-on})"
+echo "[multi] lidar      : $CH"
 cp "$CFG_SRC" "$CFG_DST"
 mkdir -p "$REPO/output/$CAM"
 for i in $(seq 1 "$N"); do mkdir -p "$REPO/calib_data/$CAM/scene$i"; done
