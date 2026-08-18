@@ -24,17 +24,26 @@ FAST-Calib2 extends [FAST-Calib](https://github.com/hku-mars/FAST-Calib) to LiDA
 - **[Detailed LiDAR↔Camera calibration guide](docs/lidar2camera_calibration_guide.md)** ([中文](docs/lidar2camera_calibration_guide_zh.md)) — end-to-end: environment setup, data capture, formatting, calibration, and evaluation, including Apollo/Cyber sources, multi-scene, and troubleshooting.
 - **[Capture & QA helper scripts](scripts/README_lidar2cam_capture.md)** — `capture_scene.sh`, `record_to_pcd.py`, `pcd_to_bag.py`, `pick_roi.py`, `overlay_reproj.py` / `render_scene_qa.py`, `multi_capture.sh` / `pick_multi_roi.sh`, `intrinsic_board_check.py`.
 
-## 1. Prerequisites
+## 1. Prerequisites & Build
 
-PCL>=1.8, OpenCV>=4.0, Eigen3, CMake>=3.10. **No ROS required.**
+**No ROS required.** Point clouds are read natively from **Apollo Cyber RT
+record files** (`cyber_recorder` output, channel with
+`apollo.drivers.PointCloud` messages) or from PCD files.
 
-Point clouds are read natively from **Apollo Cyber RT record files**
-(`cyber_recorder` output, channel with `apollo.drivers.PointCloud` messages)
-or from PCD files. Build:
+**Primary build — inside the Apollo dev environment (bazel):** uses the Apollo
+workspace's own third-party modules (`@local_config_pcl`, `@opencv`,
+`@eigen`); needs a running `apollo_dev` container.
+
+```bash
+APOLLO_HOST=/path/to/apollo scripts/apollo_build.sh
+# -> build/{fast_calib, multi_fast_calib, lidar_center_test}
+```
+
+**Fallback — plain CMake** (PCL>=1.8, OpenCV>=4.0, Eigen3, CMake>=3.10) for
+machines without an Apollo checkout:
 
 ```bash
 mkdir -p build && cd build && cmake .. && make -j
-# or inside the provided container: docker/build.sh
 ```
 
 ## 2. Calibration Target
