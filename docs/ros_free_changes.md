@@ -113,6 +113,7 @@ that machine's tuning via the new config keys):
 | All 24 extracted ring centers | identical to golden `circle_center_record.txt` |
 | Joint multi-scene `T_cam_lidar` | **bit-identical** to golden `multi_calib_result.txt` |
 | Raw-record path (425 MB `rec.00000`, no PCD/bag) | 48 frames fused · scene1 RMSE 2.8 mm |
+| Apollo-built binaries (bazel, OpenCV 4.13 / PCL 1.15) | per-scene RMSE 4.3 / 3.2 / 7.4 mm; joint T within ~0.05° / 0.13 mm of golden (tiny camera-side deltas from the new ArUco API) |
 
 The record path actually came out *tighter* than the old flow (2.8 mm vs
 4.2 mm on scene1) because it fuses all 48 frames instead of the 20 the old PCD
