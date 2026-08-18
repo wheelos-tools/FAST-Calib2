@@ -26,7 +26,16 @@ FAST-Calib2 extends [FAST-Calib](https://github.com/hku-mars/FAST-Calib) to LiDA
 
 ## 1. Prerequisites
 
-PCL>=1.8, OpenCV>=4.0.
+PCL>=1.8, OpenCV>=4.0, Eigen3, CMake>=3.10. **No ROS required.**
+
+Point clouds are read natively from **Apollo Cyber RT record files**
+(`cyber_recorder` output, channel with `apollo.drivers.PointCloud` messages)
+or from PCD files. Build:
+
+```bash
+mkdir -p build && cd build && cmake .. && make -j
+# or inside the provided container: docker/build.sh
+```
 
 ## 2. Calibration Target
 
@@ -71,22 +80,32 @@ The final quality checks include center-to-center geometry error and annulus rad
 
 ## 4. Run Examples
 
-Prepare static acquisition data in the `calib_data` folder (Download the example data from [Google Drive](https://drive.google.com/drive/folders/1VnMCsGj3Gat7dxe6IION0SfS7jYNMw1g?usp=sharing)):
+Prepare static acquisition data per scene in
+`calib_data/<cam>/<scene>/`:
 
-- rosbag containing point cloud messages
-- corresponding image
+- `image.png` — the camera frame
+- `record/` — cyber record file(s) of the LiDAR channel, **or** `cloud.pcd`
+- optional `cloud_roi.txt` (from `scripts/pick_roi.py`) — auto-applied manual ROI
 
 Run single-scene calibration:
 
 ```bash
-roslaunch fast_calib calib.launch
+./build/fast_calib --config config/cameras/<cam>.yaml \
+                   --scene calib_data/<cam>/<scene> --output output/<cam>
+# containerized: docker/run.sh <cam> <scene>
 ```
 
 After collecting at least three scenes, run multi-scene joint calibration:
 
 ```bash
-roslaunch fast_calib multi_calib.launch
+./build/multi_fast_calib --config config/cameras/<cam>.yaml --output output/<cam>
+# containerized: docker/run_multi.sh <cam>
 ```
+
+Results: `single_calib_result.txt` / `multi_calib_result.txt` (FAST-LIVO2
+format) plus `single_calib_extrinsics.yaml` / `multi_calib_extrinsics.yaml`
+(Apollo transform format, `P_cam = R · P_lidar + t`). `--debug-dir <dir>`
+writes every intermediate cloud as a PCD (replaces the former RViz topics).
 
 Typical multi-scene target placement:
 
@@ -102,27 +121,21 @@ Typical multi-scene target placement:
 
 The repository also provides a LiDAR-only test tool for checking annulus center extraction before running full camera-LiDAR calibration.
 
-Load parameters:
+Run solid-state LiDAR data (PCD or cyber record input):
 
 ```bash
-rosparam load config/qr_params.yaml /
-rosparam set /output_path /home/chunran/02_calib_ws/src/FAST-Calib/output
+./build/lidar_center_test --config config/qr_params.yaml \
+    calib_data/fast-calib2-data/left.pcd - solid
+./build/lidar_center_test --config config/cameras/<cam>.yaml \
+    calib_data/<cam>/<scene>/record /apollo/sensor/<lidar>/PointCloud2 solid
 ```
 
-Run solid-state LiDAR data:
+Run mechanical LiDAR data (set `beam_altitudes_deg` in the config to
+synthesize the scan-ring index for clouds without a `ring` field):
 
 ```bash
-rosrun fast_calib lidar_center_test calib_data/fast-calib2-data/left.bag /livox/lidar solid
-rosrun fast_calib lidar_center_test calib_data/fast-calib2-data/mid.bag /livox/lidar solid
-rosrun fast_calib lidar_center_test calib_data/fast-calib2-data/right.bag /livox/lidar solid
-```
-
-Run mechanical LiDAR data:
-
-```bash
-rosrun fast_calib lidar_center_test calib_data/hesai-jt128/left.bag /lidar_points mech
-rosrun fast_calib lidar_center_test calib_data/hesai-jt128/mid.bag /lidar_points mech
-rosrun fast_calib lidar_center_test calib_data/hesai-jt128/right.bag /lidar_points mech
+./build/lidar_center_test --config config/cameras/<cam>.yaml \
+    calib_data/<cam>/<scene>/cloud.pcd - mech
 ```
 
 The test tool writes:

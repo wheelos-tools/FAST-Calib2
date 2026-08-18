@@ -20,6 +20,8 @@ path applied.
 #ifndef DATA_PREPROCESS_HPP
 #define DATA_PREPROCESS_HPP
 
+#include "common_lib.h"  // first: defines PCL_NO_PRECOMPILE before PCL headers
+
 #include <algorithm>
 #include <cmath>
 #include <dirent.h>
@@ -33,7 +35,6 @@ path applied.
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
-#include "common_lib.h"
 #include "cyber_record_reader.hpp"
 
 using namespace std;

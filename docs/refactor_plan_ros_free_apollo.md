@@ -1,5 +1,17 @@
 # Refactor Plan: ROS-free FAST-Calib2 on Apollo Data
 
+> **Status (2026-08-18, branch `feat/ros-free-apollo`):** implemented through
+> Phase 3. One deliberate deviation from §2.1: instead of vendored protos +
+> libprotobuf, the record container and `apollo.drivers.PointCloud` payload are
+> decoded by a minimal self-contained wire-format parser
+> (`src/cyber_record_reader.hpp`); the vendored `.proto` files in `proto/` are
+> kept as the field-number reference. This removes the protobuf toolchain from
+> every build environment. The parser was validated against the python
+> `cyber_record` path on a real capture (identical fused point count,
+> 1,229,230 points over 47 frames). A second addition: the LiDAR-detector
+> tuning constants (plane gates, cluster tolerance/min-size) became config
+> keys instead of hard-coded values.
+
 Goal: remove every ROS dependency (roscpp, catkin, rosbag, rosparam, RViz, the
 `fast-calib2:noetic` container) and make **Apollo Cyber RT data the native
 input**: point clouds come straight from `cyber_recorder` `.record` files

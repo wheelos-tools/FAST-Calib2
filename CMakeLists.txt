@@ -24,6 +24,9 @@ include_directories(
   ${EIGEN3_INCLUDE_DIRS}
 )
 add_definitions(${PCL_DEFINITIONS})
+# Common::Point is a custom point type: build the PCL templates header-only so
+# every instantiation exists regardless of header include order.
+add_definitions(-DPCL_NO_PRECOMPILE)
 link_directories(${PCL_LIBRARY_DIRS})
 
 add_executable(fast_calib src/main.cpp)
