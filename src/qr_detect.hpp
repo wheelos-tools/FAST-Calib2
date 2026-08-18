@@ -7,7 +7,17 @@ which is included as part of this source code package.
 
 #ifndef QR_DETECT_HPP
 #define QR_DETECT_HPP
+#include <opencv2/core/version.hpp>
+// OpenCV >= 4.7 moved ArUco into the main objdetect module with a value-based
+// API; the legacy contrib <opencv2/aruco.hpp> API is used for older builds
+// (e.g. the ROS Noetic container's OpenCV 4.2 + contrib).
+#if CV_VERSION_MAJOR > 4 || (CV_VERSION_MAJOR == 4 && CV_VERSION_MINOR >= 7)
+#define FASTCALIB_ARUCO_NEW_API 1
+#include <opencv2/calib3d.hpp>
+#include <opencv2/objdetect/aruco_detector.hpp>
+#else
 #include <opencv2/aruco.hpp>
+#endif
 #include "common_lib.h"
 
 class QRDetect 
@@ -16,7 +26,11 @@ class QRDetect
     double marker_size_, delta_width_qr_center_, delta_height_qr_center_;
     double delta_width_circles_, delta_height_circles_;
     int min_detected_markers_;
+#ifdef FASTCALIB_ARUCO_NEW_API
+    cv::aruco::Dictionary dictionary_;
+#else
     cv::Ptr<cv::aruco::Dictionary> dictionary_;
+#endif
   
   public:
     cv::Mat imageCopy_;
@@ -137,24 +151,29 @@ class QRDetect
       }
 
       std::vector<int> boardIds{1, 2, 4, 3};  // IDs order as explained above
-      cv::Ptr<cv::aruco::Board> board =
-          cv::aruco::Board::create(boardCorners, dictionary_, boardIds);
 
-      cv::Ptr<cv::aruco::DetectorParameters> parameters =
-          cv::aruco::DetectorParameters::create();
-      // set tp use corner refinement for accuracy, values obtained
-      // for pixel coordinates are more accurate than the neaterst pixel
-
-    #if (CV_MAJOR_VERSION == 3 && CV_MINOR_VERSION <= 2) || CV_MAJOR_VERSION < 3
-      parameters->doCornerRefinement = true;
-    #else
-      parameters->cornerRefinementMethod = cv::aruco::CORNER_REFINE_SUBPIX;
-    #endif
-
-      // Detect markers
+      // Detect markers (corner refinement: subpixel corners are more accurate
+      // than the nearest pixel)
       std::vector<int> ids;
       std::vector<std::vector<cv::Point2f>> corners;
+    #ifdef FASTCALIB_ARUCO_NEW_API
+      cv::aruco::Board board(boardCorners, dictionary_, boardIds);
+      cv::aruco::DetectorParameters parameters;
+      parameters.cornerRefinementMethod = cv::aruco::CORNER_REFINE_SUBPIX;
+      cv::aruco::ArucoDetector detector(dictionary_, parameters);
+      detector.detectMarkers(image, corners, ids);
+    #else
+      cv::Ptr<cv::aruco::Board> board =
+          cv::aruco::Board::create(boardCorners, dictionary_, boardIds);
+      cv::Ptr<cv::aruco::DetectorParameters> parameters =
+          cv::aruco::DetectorParameters::create();
+      #if (CV_MAJOR_VERSION == 3 && CV_MINOR_VERSION <= 2) || CV_MAJOR_VERSION < 3
+      parameters->doCornerRefinement = true;
+      #else
+      parameters->cornerRefinementMethod = cv::aruco::CORNER_REFINE_SUBPIX;
+      #endif
       cv::aruco::detectMarkers(image, dictionary_, corners, ids, parameters);
+    #endif
 
       // Draw detections if at least one marker detected
       if (ids.size() > 0) cv::aruco::drawDetectedMarkers(imageCopy_, corners, ids);
@@ -170,8 +189,25 @@ class QRDetect
         // Estimate 3D position of the markers
         vector<Vec3d> rvecs, tvecs;
         Vec3f rvec_sin, rvec_cos;
+    #ifdef FASTCALIB_ARUCO_NEW_API
+        // estimatePoseSingleMarkers is contrib-only; per-marker solvePnP with
+        // the same marker-frame object points (CCW from top-left, y up) and
+        // the same iterative solver reproduces it.
+        {
+          const float s = static_cast<float>(marker_size_) / 2.0f;
+          std::vector<cv::Point3f> markerObj{
+              {-s, s, 0}, {s, s, 0}, {s, -s, 0}, {-s, -s, 0}};
+          rvecs.resize(corners.size());
+          tvecs.resize(corners.size());
+          for (size_t i = 0; i < corners.size(); ++i) {
+            cv::solvePnP(markerObj, corners[i], cameraMatrix_, distCoeffs_,
+                         rvecs[i], tvecs[i], false, cv::SOLVEPNP_ITERATIVE);
+          }
+        }
+    #else
         cv::aruco::estimatePoseSingleMarkers(corners, marker_size_, cameraMatrix_,
                                             distCoeffs_, rvecs, tvecs);
+    #endif
 
         // Draw markers' axis and centers in color image (Debug purposes)
         for (int i = 0; i < ids.size(); i++) {
@@ -179,8 +215,8 @@ class QRDetect
           double y = tvecs[i][1];
           double z = tvecs[i][2];
 
-          cv::aruco::drawAxis(imageCopy_, cameraMatrix_, distCoeffs_, rvecs[i],
-                              tvecs[i], 0.1);
+          cv::drawFrameAxes(imageCopy_, cameraMatrix_, distCoeffs_, rvecs[i],
+                            tvecs[i], 0.1);
 
           // Accumulate pose for initial guess
           tvec[0] += tvecs[i][0];
@@ -208,18 +244,28 @@ class QRDetect
         pcl::PointCloud<pcl::PointXYZ>::Ptr candidates_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
     // Estimate 3D position of the board using detected markers
-    #if (CV_MAJOR_VERSION == 3 && CV_MINOR_VERSION <= 2) || CV_MAJOR_VERSION < 3
-        int valid = cv::aruco::estimatePoseBoard(corners, ids, board, cameraMatrix_,
-                                                distCoeffs_, rvec, tvec);
+    #ifdef FASTCALIB_ARUCO_NEW_API
+        // estimatePoseBoard equivalent: gather board<->image correspondences,
+        // then refine the averaged single-marker pose (useExtrinsicGuess=true).
+        {
+          cv::Mat boardObjPoints, boardImgPoints;
+          board.matchImagePoints(corners, ids, boardObjPoints, boardImgPoints);
+          if (boardObjPoints.total() >= 4) {
+            cv::solvePnP(boardObjPoints, boardImgPoints, cameraMatrix_,
+                         distCoeffs_, rvec, tvec, true, cv::SOLVEPNP_ITERATIVE);
+          }
+        }
+    #elif (CV_MAJOR_VERSION == 3 && CV_MINOR_VERSION <= 2) || CV_MAJOR_VERSION < 3
+        cv::aruco::estimatePoseBoard(corners, ids, board, cameraMatrix_,
+                                     distCoeffs_, rvec, tvec);
     #else
-        int valid = cv::aruco::estimatePoseBoard(corners, ids, board, cameraMatrix_,
-                                                distCoeffs_, rvec, tvec, true);
+        cv::aruco::estimatePoseBoard(corners, ids, board, cameraMatrix_,
+                                     distCoeffs_, rvec, tvec, true);
     #endif
-
 
         // cout << "board: " <<  tvec[0] << ", "<< tvec[1] << ", " << tvec[2] << std::endl;
 
-        cv::aruco::drawAxis(imageCopy_, cameraMatrix_, distCoeffs_, rvec, tvec, 0.2);
+        cv::drawFrameAxes(imageCopy_, cameraMatrix_, distCoeffs_, rvec, tvec, 0.2);
 
         // Build transformation matrix to calibration target axis
         cv::Mat R(3, 3, cv::DataType<float>::type);
