@@ -143,9 +143,12 @@ calib_data/<cam>/<scene>/
 - `multi_calib_extrinsics.yaml` (from `multi_fast_calib`)
 
 (Deviation: the plan said `extrinsics_<cam>.yaml`; the binaries don't know the
-camera label, so the names parallel the txt outputs instead.) Format:
-`header.frame_id: <camera_frame>`, `child_frame_id: <lidar_frame>`,
-translation + unit quaternion of `T_cam_lidar`, i.e. `P_cam = R·P_lidar + t`.
+camera label, so the names parallel the txt outputs instead.) Format and
+direction follow Apollo's own camera↔LiDAR extrinsics files (verified against
+`front_6mm_extrinsics.yaml` and the velodyne↔novatel examples in apollo-base):
+`header.frame_id` = **LiDAR** (parent), `child_frame_id` = **camera**, and the
+transform is the camera's pose in the LiDAR frame — the inverse of the
+calibrated `T_cam_lidar` — as translation + scalar-last quaternion (`x,y,z,w`).
 Frame names come from the new config keys.
 
 ### 2.5 Build & packaging
@@ -199,11 +202,13 @@ data-validated on macOS, and the full build ran in the container.
 
 ## 4. Open items
 
-1. **Verify the Apollo extrinsics direction convention** against one
-   extrinsics file actually consumed by the on-car apollo-lite stack before
-   feeding `*_calib_extrinsics.yaml` into perception (cheap check,
-   catastrophic if the transform is inverted). The semantics as written:
-   `P_cam = R·P_lidar + t`, `frame_id` = camera, `child_frame_id` = LiDAR.
+1. ~~Verify the Apollo extrinsics direction convention~~ **Done (2026-08-18):**
+   checked against `front_6mm_extrinsics.yaml`, the velodyne↔novatel examples,
+   and the wheelflow camera↔lidar file in
+   `/home/nvidia/01projects/apollo-base`. The first version of the writer had
+   the parent/child direction inverted relative to Apollo's camera-extrinsics
+   convention; the writer now emits LiDAR-as-parent / camera-as-child with the
+   inverted transform, matching those files structurally and semantically.
 2. **Docs debt:** `docs/lidar2camera_calibration_guide.md` (+ zh),
    `scripts/README_lidar2cam_capture.md`, `SETUP_5CAM_VANJEE.md`, and
    `docker/README.md` still describe the ROS-bag/roslaunch flow. README.md is
