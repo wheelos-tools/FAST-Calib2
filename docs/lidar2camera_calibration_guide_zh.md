@@ -1,33 +1,27 @@
 # 激光雷达 ↔ 相机 外参标定 —— 详细指南（FAST-Calib2）
 
-> **⚠️ 本中文指南编写于 ROS 版流程，尚未随 ROS-free 重构更新。**
-> 现在的流程：不再需要 ROS / rosbag / roslaunch —— 点云直接读取 Apollo Cyber
-> record（或 PCD），编译在 Apollo 环境内完成（`scripts/apollo_build.sh`，或
-> CMake 后备方案），运行方式为 `./build/fast_calib --config ... --scene ...`。
-> 请以 [英文指南](lidar2camera_calibration_guide.md)、README 的 Quickstart 与
-> [ros_free_changes.md](ros_free_changes.md) 为准；本文档中标定板制作、摆放、
-> 精度评估等与代码无关的章节仍然有效。
-
 使用 FAST-Calib2 的反光环形标定板方案，标定**相机**与**激光雷达**之间刚体变换的完整可复现流程。
-涵盖：(1) 环境搭建，(2) 数据采集，(3) 数据格式转换，(4) 标定，(5) 结果评估。
+涵盖：(1) 环境搭建，(2) 数据采集，(3) 数据格式，(4) 标定，(5) 结果评估。
 
-适用于任意相机（RTSP / USB / 录像）与任意激光雷达（机械多线、固态或 Livox），
-无论点云来自原生 ROS 驱动还是 **Apollo Cyber RT**。
+适用于任意相机（RTSP / USB / 录像）与任意激光雷达（机械多线、固态或 Livox）。
+点云**直接读取 Apollo Cyber RT record**（`cyber_recorder` 录制结果）或 PCD 文件
+—— 全流程不使用 ROS。
 
-**产出：** `T_相机←雷达` = `(R, t)`，满足 `P_相机 = R · P_雷达 + t`。
+**产出：** `T_相机←雷达` = `(R, t)`，满足 `P_相机 = R · P_雷达 + t`（FAST-LIVO2
+txt 格式），以及一份 Apollo 惯例的外参 YAML（相机在雷达坐标系中的位姿，可直接
+放入 Apollo perception 参数目录）。
 
 ---
 
 ## 0. FAST-Calib2 工作原理（心智模型）
 
-- **离线**运行，每个*场景*（一次标定板摆位）使用一对 `(image.png, cloud.bag)`。
+- **离线**运行，每个*场景*（一次标定板摆位）使用一对 `(image.png, record/ 或 cloud.pcd)`。
 - **相机**侧：检测 4 个 ArUco 标记 → 板姿态 → 4 个环心（3D）。
 - **雷达**侧：直接从点云提取 4 个反光环心（3D）。
 - 求解使两组 4 环心最佳对齐的刚体变换（SVD）。
 - **单场景** = 一次摆位（敏感）。**多场景** = 合并 ≥3 次摆位（稳健）。
 
-下文占位符：`<REPO>` = FAST-Calib2 根目录，`<CAM>` = 相机标签，`<SCENE>` = 摆位标签，
-`<IMG>` = ROS 容器镜像 `fast-calib2:noetic`。
+下文占位符：`<REPO>` = FAST-Calib2 根目录，`<CAM>` = 相机标签，`<SCENE>` = 摆位标签。
 
 ---
 
@@ -35,19 +29,28 @@
 
 ### 1.1 前置条件
 - 一台能访问相机和雷达的机器（“主机”）。
-- **Docker**（用于 ROS Noetic 编译容器 —— 主机无需装 ROS）。
+- **正在运行的 Apollo dev 容器**（首选编译方式），或系统安装
+  `libpcl-dev libopencv-dev libeigen3-dev cmake`（后备编译方式）。
 - **ffmpeg**（抓取 RTSP 帧）、**git**、带 `pip` 的 **python3**。
 - **反光环形标定板**（FAST-Calib2 板：4 个 ArUco 标记 `DICT_6X6_250` + 4 个回反光环）。
   实测并记录其真实尺寸。
 
-### 1.2 获取 FAST-Calib2 并构建容器
+### 1.2 获取 FAST-Calib2 并编译
 ```bash
 git clone https://github.com/wheelos-tools/FAST-Calib2.git <REPO>
 cd <REPO>
-docker/build.sh        # 构建 fast-calib2:noetic 并把工作空间编译到 docker/.ws_devel
+
+# 首选：在 Apollo 环境内通过 apollo.sh（bazel）编译，仅编译本模块，
+# 使用 Apollo 工作空间自带的 pcl/opencv/eigen 三方模块。
+APOLLO_HOST=/path/to/apollo scripts/apollo_build.sh
+# 可选环境变量：APOLLO_C=<容器名> APOLLO_USER=nvidia APOLLO_BUILD_CMD=build_opt
+
+# 后备：对系统 PCL/OpenCV/Eigen 直接 CMake 编译
+mkdir -p build && cd build && cmake .. && make -j
 ```
-容器内含 PCL + OpenCV + ROS Noetic；编译产物保存在 `docker/.ws_devel/`，在 `docker run --rm`
-间保留。任何 C++ 改动后重跑 `docker/build.sh`（或在容器内 `catkin_make`）。
+两种方式都产出 `build/{fast_calib, multi_fast_calib, lidar_center_test}`。
+任何 C++ 改动后重跑同一条命令（Apollo 首次编译会把 PCL/OpenCV 从源码编一遍；
+之后为增量编译，速度很快）。
 
 ### 1.3 主机 Python 依赖（辅助脚本用）
 ```bash
@@ -62,19 +65,17 @@ python3 -m pip install --user open3d opencv-python numpy
 ### 1.4 辅助脚本（`<REPO>/scripts/`）
 | 脚本 | 作用 |
 |---|---|
-| `capture_scene.sh` | 抓相机帧 + 录制/融合雷达 → `image.png`、`cloud.pcd`、`cloud.bag` |
-| `record_to_pcd.py` | 融合来源记录的 N 个静止帧 → 稠密 ASCII PCD |
-| `pcd_to_bag.py` | PCD → ROS bag；为机械雷达合成 `ring` 字段 |
-| `pick_roi.py` | Open3D 交互式板 ROI 选点器；`--yaml` 直接写入配置 |
+| `apollo_build.sh` | 在 Apollo dev 容器内编译三个可执行文件（scoped `apollo.sh` bazel 构建） |
+| `capture_scene.sh` | 抓相机帧 + 录制雷达 → `image.png`、`record/rec.*`、`cloud.pcd` |
+| `record_to_pcd.py` | 融合来源记录的 N 个静止帧 → 稠密 ASCII PCD（供查看/选 ROI；标定程序自己会融合 record） |
+| `pick_roi.py` | Open3D 交互式板 ROI 选点器；`--yaml` 直接写入配置，生成的 `cloud_roi.txt` 会被逐场景自动应用 |
 | `overlay_reproj.py` / `render_scene_qa.py` | 重投影叠加图（+ 彩色 PCD），用于 QA |
 | `multi_capture.sh` / `pick_multi_roi.sh` | 一条命令的多场景流程（自动/手动 ROI） |
 
 ### 1.5 启动雷达驱动
-采集前雷达必须发布点云通道/话题。
+采集前雷达必须在发布点云通道。
 
-**原生 ROS 雷达：** 启动厂商 ROS 驱动，记下 `PointCloud2` 话题。
-
-**Apollo Cyber RT 雷达**（本项目情况）：在 Apollo 容器内、**以与其余进程相同的系统用户**
+**Apollo Cyber RT 雷达**：在 Apollo 容器内、**以与其余进程相同的系统用户**
 （如 `nvidia`）通过 `cyber_launch` 启动：
 ```bash
 docker exec -d -u nvidia <apollo_container> bash -lc '
@@ -116,52 +117,52 @@ docker exec -u nvidia <apollo_container> bash -lc \
   多改变标定板**位置**，而非只倾斜。
 
 ### 2.3 采集一个场景
-`capture_scene.sh` 抓一张 RTSP 帧并录制+融合雷达为 bag：
+`capture_scene.sh` 抓一张 RTSP 帧并录制雷达通道：
 ```bash
 RTSP=rtsp://user:pass@host:554/live APOLLO_C=<apollo_container> \
-CH=/apollo/sensor/<lidar>/PointCloud2 TOPIC=/lidar_points FRAME=<lidar_frame> \
-RING_FLAG=<稠密/固态用 --no-ring | 留空则合成 ring> \
-  scripts/capture_scene.sh <CAM> <SCENE> 5     # 5 秒（融合数十帧）
+CH=/apollo/sensor/<lidar>/PointCloud2 \
+  scripts/capture_scene.sh <CAM> <SCENE> 5     # 5 秒（约数十帧）
 ```
-输出 → `<REPO>/calib_data/<CAM>/<SCENE>/{image.png, cloud.pcd, cloud.bag}`。
+输出 → `<REPO>/calib_data/<CAM>/<SCENE>/{image.png, record/rec.*, cloud.pcd}`。
+原始 cyber record 就是标定输入（程序自己融合其中的帧）；`cloud.pcd` 只供
+ROI 选点器和 QA 脚本使用。
 **务必目视 `image.png`** —— 整块板（4 标记 + 4 环）必须清晰且不被裁切。
 
-**原生 ROS 替代：** `rosbag record -O .../cloud.bag <TOPIC> --duration=5`（原生保留真实 `ring`），
-再放一张帧到 `.../image.png`。
+**手动替代：** 用 `cyber_recorder record -c <channel>` 录到 `.../record/`，
+再放一张相机帧到 `.../image.png`。也可用 `cloud.pcd`（x y z intensity）作为点云来源。
 
 ### 2.4 多场景
 对 **≥3 个板姿态**（如正对、右倾、左倾，和/或左/中/右移动）重复 §2.3。§4.4 的编排脚本可自动化。
 
 ---
 
-# 3. 转换为标定格式
+# 3. 数据格式
 
-FAST-Calib2 读取带 `sensor_msgs/PointCloud2`（或 Livox `CustomMsg`）的 **ROS bag**。原生 ROS 来源
-已具备；**Apollo/Cyber 等非 ROS 来源** 由 `capture_scene.sh` 完成以下两步，这里显式说明：
+FAST-Calib2 **直接读取 Apollo Cyber record 文件**（配置通道上的
+`apollo.drivers.PointCloud` 消息），或读取 **PCD**（x y z intensity，若含
+`ring` 列则一并使用）。不再有任何转换步骤 —— 多帧融合与 ring 处理都在程序内部完成：
 
-### 3.1 融合多帧 → 稠密 PCD
-稀疏雷达的单帧常低于 FAST-Calib2 的点数阈值。采集时板与雷达静止，故**融合多帧**：
-```bash
-python3 scripts/record_to_pcd.py --record-glob '<record_dir>/*' \
-        --channel /apollo/sensor/<lidar>/PointCloud2 --out cloud.pcd --max-frames 20
-```
+### 3.1 多帧融合（自动）
+稀疏雷达的单帧常低于 FAST-Calib2 的点数阈值。采集时板与雷达静止，故加载器会
+**融合 record 中的多帧**（`max_fusion_frames: 0` = 全部帧，默认值）。
 > 融合在**方位角**上加密每条扫描线，无法增加扫描线数（由波束数决定）。若板仍显稀疏，放近些。
 
-### 3.2 PCD → ROS bag（机械雷达 + ring）
-```bash
-python3 scripts/pcd_to_bag.py --pcd cloud.pcd --bag cloud.bag \
-        --topic /lidar_points --frame <lidar_frame> [--no-ring]
-```
-- **`ring`** = 雷达*扫描线序号*（**不是**板上的环）。bag 含 `ring` 字段时，FAST-Calib2 用其
-  **机械**流程（沿每条扫描线找强度跳变）；不含时用**固态**流程（对高反环点聚类 → 拟合圆）。
-- Apollo 点云不带 `ring`。对**低线束机械**雷达（如 16 线），`pcd_to_bag` 依据各点俯仰角与标称
-  波束表**合成** `ring` → 提取更好。对**稠密**雷达（如 128 线、非均匀波束），用 **`--no-ring`**（固态流程）。
+### 3.2 扫描线 ring 处理（配置项，而非转换）
+- **`ring`** = 雷达*扫描线序号*（**不是**板上的环）。有 ring 信息时，FAST-Calib2 用其
+  **机械**流程（沿每条扫描线找强度跳变）；没有时用**固态**流程（对高反环点聚类 → 拟合圆）。
+- Apollo 点云不带 `ring`。对**低线束机械**雷达（如 16 线），在相机配置里写入该雷达的
+  标称波束俯仰角表，加载器会依据各点俯仰角**合成** `ring`：
+  ```yaml
+  beam_altitudes_deg: [14, 12, 10, 8, 6, 4, 2, 0, -2, -4, -6, -8, -10, -12, -14, -16]
+  ```
+  对**稠密**雷达（如 128 线、非均匀波束），省略该键（固态流程，即原先的 `--no-ring`）。
 
-### 3.3 launch 期望的数据布局
+### 3.3 `--scene` 期望的数据布局
 ```
 <REPO>/calib_data/<CAM>/<SCENE>/image.png
-<REPO>/calib_data/<CAM>/<SCENE>/cloud.bag
-<REPO>/config/cameras/<CAM>.yaml          # 内参 + 板几何 + 话题 + ROI
+<REPO>/calib_data/<CAM>/<SCENE>/record/rec.*   # 首选；或 cloud.pcd
+<REPO>/calib_data/<CAM>/<SCENE>/cloud_roi.txt  # 可选，自动应用的手动 ROI
+<REPO>/config/cameras/<CAM>.yaml          # 内参 + 板几何 + 通道 + ROI
 <REPO>/output/<CAM>/                        # 结果
 ```
 
@@ -180,10 +181,22 @@ python3 scripts/pcd_to_bag.py --pcd cloud.pcd --bag cloud.bag \
   circle_radius: 0.12           # 环中心线半径 [m]
   annulus_half_width: 0.025
   min_detected_markers: 3
-# 雷达
-  lidar_topic: "/lidar_points"
+# 雷达来源
+  lidar_channel: "/apollo/sensor/<lidar>/PointCloud2"
+  lidar_frame: "<lidar_frame>"   # Apollo 外参 YAML 中使用的坐标系名
+  camera_frame: "<CAM>"
+  max_fusion_frames: 0           # 0 = 融合 record 中全部帧
+  # beam_altitudes_deg: [...]    # 仅低线束机械雷达需要（§3.2）
   use_auto_lidar_roi: true      # 先试 true；失败则 false + 手动框（§4.1）
   x_min: ...  x_max: ...  y_min: ...  y_max: ...  z_min: ...  z_max: ...
+# 检测器调参（可选；下为默认值 —— 每台设备的调参写在这里，不再改源码；见 §4.2）
+  # board_plane_inlier_threshold: 0.07
+  # annulus_plane_inlier_threshold: 0.07
+  # boundary_plane_inlier_threshold: 0.03
+  # annulus_cluster_tolerance: 0.10
+  # annulus_cluster_min_size: 30
+  # mech_cluster_tolerance: 0.09
+  # mech_cluster_min_size: 80
 ```
 
 ---
@@ -203,32 +216,32 @@ FAST-Calib2 需先框出板点。
 
 ### 4.2 运行单场景
 ```bash
-docker run --rm --net=host \
-  -v "<REPO>:/root/calib_ws/src/fast_calib" \
-  -v "<REPO>/docker/.ws_build:/root/calib_ws/build" \
-  -v "<REPO>/docker/.ws_devel:/root/calib_ws/devel" \
-  <IMG> bash -lc "roslaunch fast_calib calib_cam.launch cam:=<CAM> scene:=<SCENE> rviz:=false"
+./build/fast_calib --config config/cameras/<CAM>.yaml \
+                   --scene calib_data/<CAM>/<SCENE> --output output/<CAM> \
+                   [--debug-dir output/<CAM>/debug_<SCENE>]
 ```
-（节点打印结果后进入 RViz 循环 —— 用 `timeout 90` 包裹，或在出现 `[Result] RMSE` 与
-`Saved four pairs of target centers` 后 Ctrl-C。）结果 → `output/<CAM>/single_calib_result.txt`。
+程序打印结果后**自行退出**（0 = 成功，2 = 检测失败）；`--debug-dir` 会把每个中间
+点云写成 PCD（取代原先的 RViz 话题）。结果 →
+`output/<CAM>/single_calib_result.txt` + `single_calib_extrinsics.yaml`。
 
 **成功标志：** 相机 `4 centers found`；雷达 `4 edge/annulus clusters`，同心圆以你板的内/外半径拟合；
 `[Result] RMSE: 0.00xx m`。
 
-**难点点云调参**（改 `src/lidar_detect.hpp` 后重编译）：
-- *稀疏 16 线、`boundary clusters: 0`* → 降低 `clusterMechanicalAnnulusBoundaryCloud` 的
-  `setMinClusterSize`（80→~20），提高 `setClusterTolerance`（0.09→~0.13）。
-- *稠密非均匀（AT128）、只有 2/4 簇* → 降低 `clusterAnnulusCloud` 的 `setMinClusterSize`
-  （200→~30），提高 tolerance（0.02→~0.06）。
-- *亮环点“离面”被剔除* → 收紧 ROI 使 RANSAC 拟合板（最佳），或放宽平面内点阈值（`0.015`/`0.03`）。
+**难点点云调参**（写在相机配置里 —— 不改源码、不重编译）：
+- *稀疏 16 线、`boundary clusters: 0`* → `mech_cluster_min_size: 20`、
+  `mech_cluster_tolerance: 0.13`。
+- *稠密非均匀（AT128）、只有 2/4 簇* → `annulus_cluster_min_size: 30`、
+  `annulus_cluster_tolerance: 0.06–0.10`。
+- *亮环点“离面”被剔除* → 收紧 ROI 使 RANSAC 拟合板（最佳），或放宽
+  `board_plane_inlier_threshold` / `annulus_plane_inlier_threshold`
+  （饱和的反光膜回波可能偏离板面数厘米）。
 
 ### 4.3 运行多场景（推荐）
 每次单场景运行把 4 对环心追加到 `output/<CAM>/circle_center_record.txt`；联合步骤读取最近 ≥3 个：
 ```bash
 # 完成 ≥3 次成功的单场景运行后：
-docker run --rm --net=host -v ... <IMG> \
-  bash -lc "roslaunch fast_calib multi_calib_cam.launch cam:=<CAM>"
-# -> output/<CAM>/multi_calib_result.txt
+./build/multi_fast_calib --config config/cameras/<CAM>.yaml --output output/<CAM>
+# -> output/<CAM>/multi_calib_result.txt + multi_calib_extrinsics.yaml
 ```
 
 ### 4.4 一条命令的编排脚本
@@ -301,18 +314,21 @@ python3 intrinsic_board_check.py <image.png> fx fy cx cy k1 k2 p1 p2
 ## 附录 —— 快速全流程（Apollo/Cyber 示例）
 
 ```bash
-# 0. 构建 + 依赖（一次）
-cd <REPO> && docker/build.sh
+# 0. 编译 + 依赖（一次）
+cd <REPO> && APOLLO_HOST=/path/to/apollo scripts/apollo_build.sh
 python3 -m pip install --user cyber_record protobuf==3.19.4 open3d opencv-python numpy
 
-# 1. 内参 -> config/cameras/<CAM>.yaml   （棋盘格，§2.1）
+# 1. 内参 -> config/cameras/<CAM>.yaml   （棋盘格，§2.1）；同一配置里填好
+#    lidar_channel / lidar_frame / camera_frame（§3.4）
 
 # 2-4. 采集 3 个角度 + 标定 + QA，一条命令：
-CH=/apollo/sensor/<lidar>/PointCloud2 TOPIC=/lidar_points FRAME=<frame> RING_FLAG=--no-ring \
+CH=/apollo/sensor/<lidar>/PointCloud2 \
 LIDAR_LAUNCH=/apollo/modules/drivers/lidar/<drv>/launch/<drv>.launch \
   scripts/multi_capture.sh <CAM> 3 5
 #   （倾斜板改用 scripts/pick_multi_roi.sh <CAM>_<date>）
 
-# 5. 查看 output/<CAM>_<date>/: multi_calib_result.txt, reproj_scene{1,2,3}.png,
+# 5. 查看 output/<CAM>_<date>/: multi_calib_result.txt,
+#    multi_calib_extrinsics.yaml（Apollo 惯例：相机在雷达坐标系中的位姿，
+#    可直接放入 perception 参数目录）, reproj_scene{1,2,3}.png,
 #    colored_scene{1,2,3}.pcd
 ```
