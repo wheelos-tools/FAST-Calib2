@@ -9,10 +9,7 @@ which is included as part of this source code package.
 #define LIDAR_DETECT_HPP
 #define PCL_NO_PRECOMPILE
 
-#include <sensor_msgs/PointCloud2.h>
-#include <geometry_msgs/PointStamped.h>
 #include <Eigen/Dense>
-#include <ros/ros.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/features/boundary.h>
 #include <pcl/features/normal_3d.h>
@@ -371,7 +368,7 @@ private:
             if (saturated_foreground)
             {
                 const float fallback_threshold = std::max(otsu_threshold, high_quantile);
-                ROS_WARN("[LiDAR] %s threshold %.3f is locked by saturated returns; fallback to %.3f.",
+                LOG_WARN("[LiDAR] %s threshold %.3f is locked by saturated returns; fallback to %.3f.",
                          label.c_str(), threshold, fallback_threshold);
                 threshold = fallback_threshold;
             }
@@ -380,7 +377,7 @@ private:
 
         if (threshold > high_quantile * 1.5f)
         {
-            ROS_WARN("[LiDAR] %s threshold %.3f is dominated by saturated outliers; fallback to p92 %.3f.",
+            LOG_WARN("[LiDAR] %s threshold %.3f is dominated by saturated outliers; fallback to p92 %.3f.",
                      label.c_str(), threshold, high_quantile);
             threshold = high_quantile;
         }
@@ -410,7 +407,7 @@ private:
                                            otsu_threshold, foreground_low,
                                            high_quantile, relative_high))
         {
-            ROS_WARN("[LiDAR] Unable to compute high-intensity threshold for %s.", label.c_str());
+            LOG_WARN("[LiDAR] Unable to compute high-intensity threshold for %s.", label.c_str());
             return false;
         }
         adjustHighIntensityThresholdForLabel(label, min_i, max_i, otsu_threshold,
@@ -424,10 +421,10 @@ private:
             if (p.intensity >= threshold) output->push_back(p);
         }
 
-        ROS_INFO("[LiDAR] %s intensity range: %.3f - %.3f", label.c_str(), min_i, max_i);
-        ROS_INFO("[LiDAR] %s Otsu: %.3f, foreground p15: %.3f, p92: %.3f, relative high: %.3f, threshold: %.3f",
+        LOG_INFO("[LiDAR] %s intensity range: %.3f - %.3f", label.c_str(), min_i, max_i);
+        LOG_INFO("[LiDAR] %s Otsu: %.3f, foreground p15: %.3f, p92: %.3f, relative high: %.3f, threshold: %.3f",
                  label.c_str(), otsu_threshold, foreground_low, high_quantile, relative_high, threshold);
-        ROS_INFO("[LiDAR] %s high-intensity points: %zu", label.c_str(), output->size());
+        LOG_INFO("[LiDAR] %s high-intensity points: %zu", label.c_str(), output->size());
         return !output->empty();
     }
 
@@ -441,12 +438,12 @@ private:
         output->clear();
         if (!input || input->empty())
         {
-            ROS_WARN("[LiDAR] Empty input cloud, cannot extract high-intensity points for %s.", label.c_str());
+            LOG_WARN("[LiDAR] Empty input cloud, cannot extract high-intensity points for %s.", label.c_str());
             return false;
         }
         if (!plane_coefficients || plane_coefficients->values.size() < 4)
         {
-            ROS_WARN("[LiDAR] Invalid plane coefficients for %s.", label.c_str());
+            LOG_WARN("[LiDAR] Invalid plane coefficients for %s.", label.c_str());
             return false;
         }
 
@@ -472,7 +469,7 @@ private:
                                            otsu_threshold, foreground_low,
                                            high_quantile, relative_high))
         {
-            ROS_WARN("[LiDAR] Unable to compute high-intensity threshold for %s.", label.c_str());
+            LOG_WARN("[LiDAR] Unable to compute high-intensity threshold for %s.", label.c_str());
             return false;
         }
         adjustHighIntensityThresholdForLabel(label, min_i, max_i, otsu_threshold,
@@ -487,10 +484,10 @@ private:
             if (p.intensity >= threshold) output->push_back(p);
         }
 
-        ROS_INFO("[LiDAR] %s intensity range: %.3f - %.3f", label.c_str(), min_i, max_i);
-        ROS_INFO("[LiDAR] %s Otsu: %.3f, foreground p15: %.3f, p92: %.3f, relative high: %.3f, threshold: %.3f",
+        LOG_INFO("[LiDAR] %s intensity range: %.3f - %.3f", label.c_str(), min_i, max_i);
+        LOG_INFO("[LiDAR] %s Otsu: %.3f, foreground p15: %.3f, p92: %.3f, relative high: %.3f, threshold: %.3f",
                  label.c_str(), otsu_threshold, foreground_low, high_quantile, relative_high, threshold);
-        ROS_INFO("[LiDAR] %s high-intensity points: %zu", label.c_str(), output->size());
+        LOG_INFO("[LiDAR] %s high-intensity points: %zu", label.c_str(), output->size());
         return !output->empty();
     }
 
@@ -506,12 +503,12 @@ private:
         output->clear();
         if (!input || input->empty())
         {
-            ROS_WARN("[LiDAR] Empty input cloud, cannot extract ring intensity boundaries for %s.", label.c_str());
+            LOG_WARN("[LiDAR] Empty input cloud, cannot extract ring intensity boundaries for %s.", label.c_str());
             return false;
         }
         if (!plane_coefficients || plane_coefficients->values.size() < 4)
         {
-            ROS_WARN("[LiDAR] Invalid plane coefficients for %s ring boundary extraction.", label.c_str());
+            LOG_WARN("[LiDAR] Invalid plane coefficients for %s ring boundary extraction.", label.c_str());
             return false;
         }
 
@@ -537,7 +534,7 @@ private:
                                            otsu_threshold, foreground_low,
                                            high_quantile, relative_high))
         {
-            ROS_WARN("[LiDAR] Unable to compute high-intensity threshold for %s ring boundaries.", label.c_str());
+            LOG_WARN("[LiDAR] Unable to compute high-intensity threshold for %s ring boundaries.", label.c_str());
             return false;
         }
         adjustHighIntensityThresholdForLabel(label, min_i, max_i, otsu_threshold,
@@ -612,14 +609,14 @@ private:
             }
         }
 
-        ROS_INFO("[LiDAR] %s ring-boundary intensity range: %.3f - %.3f", label.c_str(), min_i, max_i);
-        ROS_INFO("[LiDAR] %s ring-boundary Otsu: %.3f, foreground p15: %.3f, p92: %.3f, relative high: %.3f, threshold: %.3f, jump threshold: %.3f",
+        LOG_INFO("[LiDAR] %s ring-boundary intensity range: %.3f - %.3f", label.c_str(), min_i, max_i);
+        LOG_INFO("[LiDAR] %s ring-boundary Otsu: %.3f, foreground p15: %.3f, p92: %.3f, relative high: %.3f, threshold: %.3f, jump threshold: %.3f",
                  label.c_str(), otsu_threshold, foreground_low, high_quantile,
                  relative_high, threshold, jump_threshold);
-        ROS_INFO("[LiDAR] %s ring-boundary rings: %zu, valid neighbors: %zu, transitions: %zu, boundary points: %zu",
+        LOG_INFO("[LiDAR] %s ring-boundary rings: %zu, valid neighbors: %zu, transitions: %zu, boundary points: %zu",
                  label.c_str(), indices_by_ring.size(), valid_neighbor_count,
                  transition_count, output->size());
-        ROS_INFO("[LiDAR] %s ring-boundary point mode: %s",
+        LOG_INFO("[LiDAR] %s ring-boundary point mode: %s",
                  label.c_str(), interpolate_boundary ? "interpolated crossing" : "high-reflectivity side");
 
         return !output->empty();
@@ -1114,7 +1111,7 @@ private:
         Eigen::Vector3d normal(rough_plane->values[0], rough_plane->values[1], rough_plane->values[2]);
         if (normal.norm() < 1e-6)
         {
-            ROS_WARN("[LiDAR] Auto ROI failed: invalid rough plane normal.");
+            LOG_WARN("[LiDAR] Auto ROI failed: invalid rough plane normal.");
             return false;
         }
         normal.normalize();
@@ -1138,7 +1135,7 @@ private:
         Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solver(covariance);
         if (solver.info() != Eigen::Success)
         {
-            ROS_WARN("[LiDAR] Auto ROI failed: cannot build board axes.");
+            LOG_WARN("[LiDAR] Auto ROI failed: cannot build board axes.");
             return false;
         }
 
@@ -1146,7 +1143,7 @@ private:
         x_axis -= normal * x_axis.dot(normal);
         if (x_axis.norm() < 1e-6)
         {
-            ROS_WARN("[LiDAR] Auto ROI failed: invalid board x-axis.");
+            LOG_WARN("[LiDAR] Auto ROI failed: invalid board x-axis.");
             return false;
         }
         x_axis.normalize();
@@ -1154,7 +1151,7 @@ private:
         Eigen::Vector3d y_axis = normal.cross(x_axis);
         if (y_axis.norm() < 1e-6)
         {
-            ROS_WARN("[LiDAR] Auto ROI failed: invalid board y-axis.");
+            LOG_WARN("[LiDAR] Auto ROI failed: invalid board y-axis.");
             return false;
         }
         y_axis.normalize();
@@ -1201,21 +1198,21 @@ private:
 
         pcl::PointCloud<Common::Point>::Ptr finite_cloud(new pcl::PointCloud<Common::Point>);
         copyFiniteRangePoints(cloud, finite_cloud);
-        ROS_INFO("[LiDAR] Auto ROI finite cloud size: %zu", finite_cloud->size());
+        LOG_INFO("[LiDAR] Auto ROI finite cloud size: %zu", finite_cloud->size());
         if (finite_cloud->size() < 1000)
         {
-            ROS_WARN("[LiDAR] Auto ROI failed: too few finite points.");
+            LOG_WARN("[LiDAR] Auto ROI failed: too few finite points.");
             return false;
         }
 
         pcl::PointCloud<Common::Point>::Ptr coarse_cloud(new pcl::PointCloud<Common::Point>);
         // 粗定位阶段降低采集时长对点数的影响，同时保留高反 annulus 回波。
         voxelDownsampleKeepMaxIntensity(finite_cloud, auto_roi_voxel_leaf_, coarse_cloud);
-        ROS_INFO("[LiDAR] Auto ROI max-intensity voxel cloud size: %zu (leaf %.3f m)",
+        LOG_INFO("[LiDAR] Auto ROI max-intensity voxel cloud size: %zu (leaf %.3f m)",
                  coarse_cloud->size(), auto_roi_voxel_leaf_);
         if (coarse_cloud->size() < 1000)
         {
-            ROS_WARN("[LiDAR] Auto ROI failed: too few points after max-intensity voxel sampling.");
+            LOG_WARN("[LiDAR] Auto ROI failed: too few points after max-intensity voxel sampling.");
             return false;
         }
 
@@ -1228,7 +1225,7 @@ private:
 
         if (high_cloud->size() < 1000)
         {
-            ROS_WARN("[LiDAR] Auto ROI failed: too few high-intensity points.");
+            LOG_WARN("[LiDAR] Auto ROI failed: too few high-intensity points.");
             return false;
         }
 
@@ -1244,10 +1241,10 @@ private:
         ec.setInputCloud(high_cloud);
         ec.extract(cluster_indices);
 
-        ROS_INFO("[LiDAR] Auto ROI high-intensity clusters: %zu", cluster_indices.size());
+        LOG_INFO("[LiDAR] Auto ROI high-intensity clusters: %zu", cluster_indices.size());
         if (cluster_indices.size() < TARGET_NUM_CIRCLES)
         {
-            ROS_WARN("[LiDAR] Auto ROI failed: fewer than 4 high-intensity clusters.");
+            LOG_WARN("[LiDAR] Auto ROI failed: fewer than 4 high-intensity clusters.");
             return false;
         }
 
@@ -1259,7 +1256,7 @@ private:
         // 按已知 0.5m x 0.4m annulus 中心几何关系剔除无关高反物。
         if (!selectGeometryConsistentCentersByDistances(candidate_centers, selected_indices, 0.18))
         {
-            ROS_WARN("[LiDAR] Auto ROI failed: no high-intensity cluster set matches target geometry.");
+            LOG_WARN("[LiDAR] Auto ROI failed: no high-intensity cluster set matches target geometry.");
             return false;
         }
 
@@ -1271,7 +1268,7 @@ private:
         pcl::ModelCoefficients::Ptr rough_plane(new pcl::ModelCoefficients);
         if (!fitPlaneRansac(selected_high_points, rough_plane, 0.03))
         {
-            ROS_WARN("[LiDAR] Auto ROI failed: cannot fit rough plane from selected reflective annuli.");
+            LOG_WARN("[LiDAR] Auto ROI failed: cannot fit rough plane from selected reflective annuli.");
             return false;
         }
 
@@ -1283,10 +1280,10 @@ private:
         }
         cropBoardRoiByFrame(finite_cloud, board_frame, board_roi_cloud);
 
-        ROS_INFO("[LiDAR] Auto ROI board cloud size: %zu", board_roi_cloud->size());
+        LOG_INFO("[LiDAR] Auto ROI board cloud size: %zu", board_roi_cloud->size());
         if (board_roi_cloud->size() < 1000)
         {
-            ROS_WARN("[LiDAR] Auto ROI failed: board ROI is too small.");
+            LOG_WARN("[LiDAR] Auto ROI failed: board ROI is too small.");
             return false;
         }
 
@@ -1312,16 +1309,16 @@ private:
     {
         if (use_auto_lidar_roi_)
         {
-            ROS_INFO("[LiDAR] Using automatic board ROI extraction.");
+            LOG_INFO("[LiDAR] Using automatic board ROI extraction.");
             if (!extractAutoBoardRoi(cloud, board_roi_cloud))
             {
-                ROS_WARN("[LiDAR] Automatic board ROI extraction failed.");
+                LOG_WARN("[LiDAR] Automatic board ROI extraction failed.");
                 return false;
             }
         }
         else
         {
-            ROS_INFO("[LiDAR] Using manual pass-through board ROI extraction.");
+            LOG_INFO("[LiDAR] Using manual pass-through board ROI extraction.");
             manualPassThroughFilter(cloud, board_roi_cloud);
         }
         return true;
@@ -1351,16 +1348,16 @@ private:
                               pcl::ModelCoefficients::Ptr plane_coefficients)
     {
         *filtered_cloud_ = *board_roi_cloud;
-        ROS_INFO("[LiDAR] Board ROI cloud size: %zu", filtered_cloud_->size());
+        LOG_INFO("[LiDAR] Board ROI cloud size: %zu", filtered_cloud_->size());
         if (filtered_cloud_->size() < 1000)
         {
-            ROS_WARN("[LiDAR] Too few board ROI points.");
+            LOG_WARN("[LiDAR] Too few board ROI points.");
             return false;
         }
 
         if (!fitPlaneRansac(filtered_cloud_, plane_coefficients, 0.01))
         {
-            ROS_WARN("[LiDAR] Unable to fit board plane from ROI cloud.");
+            LOG_WARN("[LiDAR] Unable to fit board plane from ROI cloud.");
             return false;
         }
 
@@ -1368,10 +1365,10 @@ private:
         // board plane (measured on car-ningde-orin); a 1.5 cm gate silently
         // drops most ring points (guide §4.2 "亮环点离面被剔除").
         extractPlaneInliers(filtered_cloud_, plane_coefficients, plane_cloud_, 0.07);
-        ROS_INFO("Plane cloud size: %zu", plane_cloud_->size());
+        LOG_INFO("Plane cloud size: %zu", plane_cloud_->size());
         if (plane_cloud_->size() < 500)
         {
-            ROS_WARN("[LiDAR] Too few board plane inliers.");
+            LOG_WARN("[LiDAR] Too few board plane inliers.");
             return false;
         }
         return true;
@@ -1386,7 +1383,7 @@ private:
                                plane_coefficients->values[2]);
         if (normal.norm() < 1e-6)
         {
-            ROS_WARN("[LiDAR] Invalid plane normal.");
+            LOG_WARN("[LiDAR] Invalid plane normal.");
             return false;
         }
         normal.normalize();
@@ -1419,7 +1416,7 @@ private:
 
         if (cnt == 0)
         {
-            ROS_WARN("[LiDAR] No board plane points to align.");
+            LOG_WARN("[LiDAR] No board plane points to align.");
             return false;
         }
         alignment.average_z = average_z / static_cast<double>(cnt);
@@ -1449,11 +1446,11 @@ private:
             Eigen::Vector3d aligned_point = alignment.rotation * point;
             edge_cloud_->push_back(pcl::PointXYZ(aligned_point.x(), aligned_point.y(), 0.0));
         }
-        ROS_INFO("Extracted %zu high-intensity annulus points before voxel sampling.", edge_cloud_->size());
+        LOG_INFO("Extracted %zu high-intensity annulus points before voxel sampling.", edge_cloud_->size());
 
         if (edge_cloud_->size() < 20)
         {
-            ROS_WARN("[LiDAR] Too few annulus points after intensity extraction.");
+            LOG_WARN("[LiDAR] Too few annulus points after intensity extraction.");
             return false;
         }
 
@@ -1461,7 +1458,7 @@ private:
         // 聚类/拟合前只做空间稀疏，限制 cluster 点数且不生成虚拟点。
         voxelDownsampleClosestToCentroid(edge_cloud_, annulus_voxel_leaf_, annulus_cloud_downsampled);
         edge_cloud_.swap(annulus_cloud_downsampled);
-        ROS_INFO("[LiDAR] Annulus points after closest-to-centroid voxel sampling: %zu (leaf %.3f m)",
+        LOG_INFO("[LiDAR] Annulus points after closest-to-centroid voxel sampling: %zu (leaf %.3f m)",
                  edge_cloud_->size(), annulus_voxel_leaf_);
         return true;
     }
@@ -1478,7 +1475,7 @@ private:
                                                          annulus_original_cloud_, "Annulus",
                                                          interpolate_boundary))
         {
-            ROS_WARN("[LiDAR] Ring-boundary annulus extraction failed; fallback to high-intensity annulus points.");
+            LOG_WARN("[LiDAR] Ring-boundary annulus extraction failed; fallback to high-intensity annulus points.");
             if (!extractHighIntensityPointsNearPlane(plane_cloud_, plane_coefficients,
                                                      plane_distance_threshold,
                                                      annulus_original_cloud_, "Annulus"))
@@ -1488,7 +1485,7 @@ private:
         }
         if (annulus_original_cloud_->size() < 80)
         {
-            ROS_WARN("[LiDAR] Ring-boundary annulus points are too sparse (%zu); fallback to high-intensity annulus points.",
+            LOG_WARN("[LiDAR] Ring-boundary annulus points are too sparse (%zu); fallback to high-intensity annulus points.",
                      annulus_original_cloud_->size());
             if (!extractHighIntensityPointsNearPlane(plane_cloud_, plane_coefficients,
                                                      plane_distance_threshold,
@@ -1497,7 +1494,7 @@ private:
                 return false;
             }
         }
-        ROS_INFO("[LiDAR] Extracted %zu high-intensity annulus points.",
+        LOG_INFO("[LiDAR] Extracted %zu high-intensity annulus points.",
                  annulus_original_cloud_->size());
 
         edge_cloud_->clear();
@@ -1508,11 +1505,11 @@ private:
             Eigen::Vector3d aligned_point = alignment.rotation * point;
             edge_cloud_->push_back(pcl::PointXYZ(aligned_point.x(), aligned_point.y(), 0.0));
         }
-        ROS_INFO("Extracted %zu high-intensity annulus points before voxel sampling.", edge_cloud_->size());
+        LOG_INFO("Extracted %zu high-intensity annulus points before voxel sampling.", edge_cloud_->size());
 
         if (edge_cloud_->size() < 20)
         {
-            ROS_WARN("[LiDAR] Too few annulus points after intensity extraction.");
+            LOG_WARN("[LiDAR] Too few annulus points after intensity extraction.");
             return false;
         }
 
@@ -1521,13 +1518,13 @@ private:
         voxelDownsampleClosestToCentroid(edge_cloud_, annulus_voxel_leaf_, annulus_cloud_downsampled);
         if (annulus_cloud_downsampled->size() < 1200 && edge_cloud_->size() > annulus_cloud_downsampled->size() * 5)
         {
-            ROS_WARN("[LiDAR] Voxel sampling made annulus cloud too sparse; keep raw annulus points for fitting.");
+            LOG_WARN("[LiDAR] Voxel sampling made annulus cloud too sparse; keep raw annulus points for fitting.");
         }
         else
         {
             edge_cloud_.swap(annulus_cloud_downsampled);
         }
-        ROS_INFO("[LiDAR] Annulus points after closest-to-centroid voxel sampling: %zu (leaf %.3f m)",
+        LOG_INFO("[LiDAR] Annulus points after closest-to-centroid voxel sampling: %zu (leaf %.3f m)",
                  edge_cloud_->size(), annulus_voxel_leaf_);
         return true;
     }
@@ -1552,7 +1549,7 @@ private:
         ec.setInputCloud(edge_cloud_);
         ec.extract(cluster_indices);
 
-        ROS_INFO("Number of edge clusters: %zu", cluster_indices.size());
+        LOG_INFO("Number of edge clusters: %zu", cluster_indices.size());
     }
 
     // 对机械 LiDAR 的环边界点做较宽容的欧式聚类
@@ -1570,7 +1567,7 @@ private:
         ec.setInputCloud(edge_cloud_);
         ec.extract(cluster_indices);
 
-        ROS_INFO("[LiDAR] Mechanical annulus boundary clusters: %zu", cluster_indices.size());
+        LOG_INFO("[LiDAR] Mechanical annulus boundary clusters: %zu", cluster_indices.size());
     }
 
     // 对每个 annulus 聚类拟合圆，并输出通过半径和残差检查的候选中心
@@ -1591,18 +1588,18 @@ private:
             CircleFitResult fit;
             if (!fitCircleRobust(cluster, fit))
             {
-                ROS_WARN("[LiDAR] Annulus fit failed for cluster %zu with %zu points.", i, cluster->size());
+                LOG_WARN("[LiDAR] Annulus fit failed for cluster %zu with %zu points.", i, cluster->size());
                 continue;
             }
 
             const bool radius_ok = std::fabs(fit.radius - circle_radius_) < 0.05;
             const bool error_ok = fit.mean_abs_error < 0.03;
-            ROS_INFO("[LiDAR] Annulus cluster %zu: points=%zu, center=(%.4f, %.4f), radius=%.4f, mean abs error=%.4f",
+            LOG_INFO("[LiDAR] Annulus cluster %zu: points=%zu, center=(%.4f, %.4f), radius=%.4f, mean abs error=%.4f",
                      i, cluster->size(), fit.x, fit.y, fit.radius, fit.mean_abs_error);
 
             if (!radius_ok || !error_ok)
             {
-                ROS_WARN("[LiDAR] Reject cluster %zu: radius_ok=%d, error_ok=%d.", i, radius_ok, error_ok);
+                LOG_WARN("[LiDAR] Reject cluster %zu: radius_ok=%d, error_ok=%d.", i, radius_ok, error_ok);
                 continue;
             }
 
@@ -1635,7 +1632,7 @@ private:
             const double outer_radius = circle_radius_ + annulus_half_width_;
             if (!fitFixedRadiiConcentricCenterRobust(cluster, inner_radius, outer_radius, fit))
             {
-                ROS_WARN("[LiDAR] Concentric annulus fit failed for cluster %zu with %zu boundary points.",
+                LOG_WARN("[LiDAR] Concentric annulus fit failed for cluster %zu with %zu boundary points.",
                          i, cluster->size());
                 continue;
             }
@@ -1643,14 +1640,14 @@ private:
             const bool error_ok = fit.rmse < 0.025;
             const bool width_ok = (fit.outer_radius - fit.inner_radius) > 0.006 &&
                                   (fit.outer_radius - fit.inner_radius) < 0.10;
-            ROS_INFO("[LiDAR] Concentric annulus cluster %zu: points=%zu, support=%d, center=(%.4f, %.4f), radii=(%.4f, %.4f), mean abs=%.4f, rmse=%.4f",
+            LOG_INFO("[LiDAR] Concentric annulus cluster %zu: points=%zu, support=%d, center=(%.4f, %.4f), radii=(%.4f, %.4f), mean abs=%.4f, rmse=%.4f",
                      i, cluster->size(), fit.support, fit.x, fit.y,
                      fit.inner_radius, fit.outer_radius,
                      fit.mean_abs_error, fit.rmse);
 
             if (!error_ok || !width_ok)
             {
-                ROS_WARN("[LiDAR] Reject concentric cluster %zu: error_ok=%d, width_ok=%d.",
+                LOG_WARN("[LiDAR] Reject concentric cluster %zu: error_ok=%d, width_ok=%d.",
                          i, error_ok, width_ok);
                 continue;
             }
@@ -1675,7 +1672,7 @@ private:
             }
         }
 
-        ROS_INFO("[LiDAR] Concentric annulus center candidates: %zu", candidate_centers->size());
+        LOG_INFO("[LiDAR] Concentric annulus center candidates: %zu", candidate_centers->size());
     }
 
     // 使用 PCL 法线和边界估计从固态 LiDAR 高反聚类中提取内外边界点
@@ -1743,7 +1740,7 @@ private:
             pcl::PointCloud<pcl::PointXYZ>::Ptr boundary_cloud(new pcl::PointCloud<pcl::PointXYZ>);
             if (!extractBoundaryPointsFromCluster(cluster, boundary_cloud))
             {
-                ROS_WARN("[LiDAR] Solid boundary extraction failed for cluster %zu with %zu points.",
+                LOG_WARN("[LiDAR] Solid boundary extraction failed for cluster %zu with %zu points.",
                          i, cluster->size());
                 continue;
             }
@@ -1751,18 +1748,18 @@ private:
             ConcentricCircleFitResult fit;
             if (!fitFixedRadiiConcentricCenterRobust(boundary_cloud, inner_radius, outer_radius, fit))
             {
-                ROS_WARN("[LiDAR] Solid boundary concentric fit failed for cluster %zu with %zu boundary points.",
+                LOG_WARN("[LiDAR] Solid boundary concentric fit failed for cluster %zu with %zu boundary points.",
                          i, boundary_cloud->size());
                 continue;
             }
 
             const bool error_ok = fit.rmse < 0.025;
-            ROS_INFO("[LiDAR] Solid boundary cluster %zu: cluster=%zu, boundary=%zu, center=(%.4f, %.4f), radii=(%.4f, %.4f), mean abs=%.4f, rmse=%.4f",
+            LOG_INFO("[LiDAR] Solid boundary cluster %zu: cluster=%zu, boundary=%zu, center=(%.4f, %.4f), radii=(%.4f, %.4f), mean abs=%.4f, rmse=%.4f",
                      i, cluster->size(), boundary_cloud->size(), fit.x, fit.y,
                      fit.inner_radius, fit.outer_radius, fit.mean_abs_error, fit.rmse);
             if (!error_ok)
             {
-                ROS_WARN("[LiDAR] Reject solid boundary cluster %zu: rmse %.4f.", i, fit.rmse);
+                LOG_WARN("[LiDAR] Reject solid boundary cluster %zu: rmse %.4f.", i, fit.rmse);
                 continue;
             }
 
@@ -1774,7 +1771,7 @@ private:
             *boundary_edge_cloud += *boundary_cloud;
         }
 
-        ROS_INFO("[LiDAR] Solid boundary concentric center candidates: %zu", candidate_centers->size());
+        LOG_INFO("[LiDAR] Solid boundary concentric center candidates: %zu", candidate_centers->size());
     }
 
     // 将 Z=0 平面上的 annulus 中心逆变换回原始 LiDAR 坐标系
@@ -1834,17 +1831,8 @@ private:
     }
 
 public:
-    ros::Publisher filtered_pub_;
-    ros::Publisher plane_pub_;
-    ros::Publisher annulus_pub_;
-    ros::Publisher boundary_pub_;
-    ros::Publisher aligned_pub_;
-    ros::Publisher edge_pub_;
-    ros::Publisher center_z0_pub_;
-    ros::Publisher center_pub_;
-
-    // 构造 LiDAR 检测器并读取参数、初始化调试点云发布器
-    LidarDetect(ros::NodeHandle &nh, Params &params)
+    // 构造 LiDAR 检测器并读取参数
+    explicit LidarDetect(const Params &params)
         : filtered_cloud_(new pcl::PointCloud<Common::Point>),
           plane_cloud_(new pcl::PointCloud<Common::Point>),
           annulus_original_cloud_(new pcl::PointCloud<Common::Point>),
@@ -1870,15 +1858,6 @@ public:
         auto_roi_voxel_leaf_ = params.auto_roi_voxel_leaf;
         annulus_voxel_leaf_ = params.annulus_voxel_leaf;
         use_auto_lidar_roi_ = params.use_auto_lidar_roi;
-
-        filtered_pub_ = nh.advertise<sensor_msgs::PointCloud2>("filtered_cloud", 1);
-        plane_pub_ = nh.advertise<sensor_msgs::PointCloud2>("plane_cloud", 1);
-        annulus_pub_ = nh.advertise<sensor_msgs::PointCloud2>("annulus_cloud", 1);
-        boundary_pub_ = nh.advertise<sensor_msgs::PointCloud2>("boundary_cloud", 1);
-        aligned_pub_ = nh.advertise<sensor_msgs::PointCloud2>("aligned_cloud", 1);
-        edge_pub_ = nh.advertise<sensor_msgs::PointCloud2>("edge_cloud", 1);
-        center_z0_pub_ = nh.advertise<sensor_msgs::PointCloud2>("center_z0_cloud", 10);
-        center_pub_ = nh.advertise<sensor_msgs::PointCloud2>("center_cloud", 10);
     }
 
     // 处理机械式 LiDAR 点云并提取 4 个 annulus 中心
@@ -1928,7 +1907,7 @@ public:
                                                             attempt.selected_indices,
                                                             0.035))
             {
-                ROS_WARN("[LiDAR] Mechanical concentric fitting (%s boundary) did not produce 4 geometry-consistent centers from %zu candidates.",
+                LOG_WARN("[LiDAR] Mechanical concentric fitting (%s boundary) did not produce 4 geometry-consistent centers from %zu candidates.",
                          interpolate_boundary ? "interpolated" : "high-side",
                          attempt.candidate_centers->size());
                 return attempt;
@@ -1938,9 +1917,9 @@ public:
             *(attempt.annulus_original_cloud) = *annulus_original_cloud_;
             *(attempt.edge_cloud) = *edge_cloud_;
             attempt.success = true;
-            ROS_INFO("[LiDAR] Mechanical concentric fitting selected %s ring-boundary points.",
+            LOG_INFO("[LiDAR] Mechanical concentric fitting selected %s ring-boundary points.",
                      interpolate_boundary ? "interpolated" : "high-side");
-            ROS_INFO("[LiDAR] Mechanical %s boundary geometry max error %.2f mm.",
+            LOG_INFO("[LiDAR] Mechanical %s boundary geometry max error %.2f mm.",
                      interpolate_boundary ? "interpolated" : "high-side",
                      attempt.geometry_error * 1000.0);
             return attempt;
@@ -1967,7 +1946,7 @@ public:
 
         *annulus_original_cloud_ = *(best_attempt->annulus_original_cloud);
         *edge_cloud_ = *(best_attempt->edge_cloud);
-        ROS_INFO("[LiDAR] Mechanical concentric centers selected with geometry max error %.2f mm.",
+        LOG_INFO("[LiDAR] Mechanical concentric centers selected with geometry max error %.2f mm.",
                  best_attempt->geometry_error * 1000.0);
         transformCentersBackToLidar(best_attempt->candidate_centers,
                                     best_attempt->selected_indices,
@@ -2004,7 +1983,7 @@ public:
         std::vector<int> selected_indices;
         if (!selectGeometryConsistentCenters(candidate_centers, selected_indices))
         {
-            ROS_WARN("[LiDAR] Unable to select 4 geometry-consistent annulus centers from %zu candidates.",
+            LOG_WARN("[LiDAR] Unable to select 4 geometry-consistent annulus centers from %zu candidates.",
                      candidate_centers->size());
             return;
         }
@@ -2025,20 +2004,20 @@ public:
         {
             const double boundary_geometry_error =
                 selectedCentersGeometryMaxError(boundary_candidate_centers, boundary_selected_indices);
-            ROS_INFO("[LiDAR] Solid single-circle geometry max error %.2f mm; boundary concentric %.2f mm.",
+            LOG_INFO("[LiDAR] Solid single-circle geometry max error %.2f mm; boundary concentric %.2f mm.",
                      single_circle_geometry_error * 1000.0,
                      boundary_geometry_error * 1000.0);
 
             if (boundary_geometry_error < single_circle_geometry_error)
             {
-                ROS_INFO("[LiDAR] Use solid boundary concentric centers.");
+                LOG_INFO("[LiDAR] Use solid boundary concentric centers.");
                 candidate_centers = boundary_candidate_centers;
                 selected_indices = boundary_selected_indices;
             }
         }
         else
         {
-            ROS_WARN("[LiDAR] Solid boundary concentric fitting did not produce 4 geometry-consistent centers from %zu candidates.",
+            LOG_WARN("[LiDAR] Solid boundary concentric fitting did not produce 4 geometry-consistent centers from %zu candidates.",
                      boundary_candidate_centers->size());
         }
 

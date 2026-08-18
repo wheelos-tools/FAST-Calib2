@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Run a single-scene LiDAR-camera calibration inside the container.
 #
-#   docker/run.sh <cam> <scene> [rviz]
+#   docker/run.sh <cam> <scene> [extra fast_calib args...]
 #
 # Examples:
-#   docker/run.sh cam0 scene1          # calibrate cam0 against the Vanjee LiDAR
-#   docker/run.sh cam2 scene3 true     # with RViz (needs X11, see docker/README.md)
+#   docker/run.sh cam0 scene1
+#   docker/run.sh cam2 scene3 --debug-dir output/cam2/debug_scene3
 #
-# The node prints "T_cam_lidar" and RMSE, then enters a publish loop for RViz;
-# press Ctrl-C once the result is printed. Results are written to output/<cam>/.
+# The binary prints "T_cam_lidar" + RMSE and exits. Results -> output/<cam>/.
+# Scene data: calib_data/<cam>/<scene>/ with image.png plus record/ (cyber
+# record files) or cloud.pcd; a cloud_roi.txt in the scene dir is auto-applied.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,17 +17,12 @@ IMAGE="fast-calib2:noetic"
 
 CAM="${1:-cam0}"
 SCENE="${2:-scene1}"
-RVIZ="${3:-false}"
+shift 2 2>/dev/null || true
 
-X11_ARGS=()
-if [ "${RVIZ}" = "true" ]; then
-    X11_ARGS=(-e DISPLAY="${DISPLAY:-:0}" -v /tmp/.X11-unix:/tmp/.X11-unix)
-fi
-
-docker run --rm -it --net=host \
-    -v "${REPO}:/root/calib_ws/src/fast_calib" \
-    -v "${REPO}/docker/.ws_build:/root/calib_ws/build" \
-    -v "${REPO}/docker/.ws_devel:/root/calib_ws/devel" \
-    "${X11_ARGS[@]}" \
+docker run --rm --net=host \
+    -v "${REPO}:/w" \
     "${IMAGE}" \
-    bash -lc "roslaunch fast_calib calib_cam.launch cam:=${CAM} scene:=${SCENE} rviz:=${RVIZ}"
+    /w/docker/.ws_build/fast_calib \
+      --config "/w/config/cameras/${CAM}.yaml" \
+      --scene "/w/calib_data/${CAM}/${SCENE}" \
+      --output "/w/output/${CAM}" "$@"

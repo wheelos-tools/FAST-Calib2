@@ -60,16 +60,13 @@ ffmpeg -nostdin -loglevel error -rtsp_transport tcp -i "$RTSP" \
 
 wait "$LIDAR_PID" || true
 
-# --- fuse frames -> PCD (host, cyber_record reader) ---
+# --- keep the raw cyber record: fast_calib reads it directly (no ROS bag) ---
+mkdir -p "$DEST/record"
+cp -f "$WORK"/rec.* "$DEST/record/"
+
+# --- fuse frames -> PCD (host, cyber_record reader; feeds pick_roi.py / QA) ---
 python3 "$TOOLS/record_to_pcd.py" \
   --record-glob "$WORK/rec.*" --channel "$CH" --out "$DEST/cloud.pcd" --max-frames 1000
-
-# --- PCD -> rosbag (ROS container) ---
-docker run --rm -v "$REPO:$REPO" "$ROS_IMG" bash -lc "
-  source /opt/ros/noetic/setup.bash
-  python3 $TOOLS/pcd_to_bag.py --pcd $DEST/cloud.pcd --bag $DEST/cloud.bag \
-    --topic $TOPIC --frame $FRAME $RING_FLAG
-"
 
 echo "[capture] DONE -> $DEST"
 ls -la "$DEST"

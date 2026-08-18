@@ -13,10 +13,9 @@ which is included as part of this source code package.
 #include <pcl/point_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/filters/extract_indices.h>
+#include <pcl/filters/passthrough.h>
 #include <pcl/common/transforms.h>
-#include <pcl_ros/point_cloud.h>
-#include <pcl_ros/filters/passthrough.h>
-#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/common/centroid.h>
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/features/boundary.h>
 #include <pcl/features/normal_3d.h>
@@ -24,10 +23,12 @@ which is included as part of this source code package.
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/registration/transformation_estimation_svd.h>
+#include <chrono>
 #include <cmath>
 #include <opencv2/opencv.hpp>
-#include <tf/tf.h>
 #include "color.h"
+#include "log.h"
+#include "params.h"
 
 using namespace std;
 using namespace cv;
@@ -56,60 +57,7 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(Common::Point,
   (std::uint16_t, ring, ring)
 );
 
-// 参数结构体
-struct Params {
-  double x_min, x_max, y_min, y_max, z_min, z_max;
-  bool use_auto_lidar_roi;
-  double fx, fy, cx, cy, k1, k2, p1, p2;
-  double marker_size, delta_width_qr_center, delta_height_qr_center;
-  double delta_width_circles, delta_height_circles, circle_radius, annulus_half_width;
-  double board_width, board_height, board_roi_margin, board_roi_depth;
-  double auto_roi_voxel_leaf, annulus_voxel_leaf;
-  int min_detected_markers;
-  string image_path;
-  string bag_path;
-  string lidar_topic;
-  string output_path;
-};
-
-// 读取参数
-Params loadParameters(ros::NodeHandle &nh) {
-  Params params;
-  nh.param("fx", params.fx, 1215.31801774424);
-  nh.param("fy", params.fy, 1214.72961288138);
-  nh.param("cx", params.cx, 1047.86571859677);
-  nh.param("cy", params.cy, 745.068353101898);
-  nh.param("k1", params.k1, -0.33574781188503);
-  nh.param("k2", params.k2, 0.10996870793601);
-  nh.param("p1", params.p1, 0.000157303079833973);
-  nh.param("p2", params.p2, 0.000544930726278493);
-  nh.param("marker_size", params.marker_size, 0.2);
-  nh.param("delta_width_qr_center", params.delta_width_qr_center, 0.55);
-  nh.param("delta_height_qr_center", params.delta_height_qr_center, 0.35);
-  nh.param("delta_width_circles", params.delta_width_circles, 0.5);
-  nh.param("delta_height_circles", params.delta_height_circles, 0.4);
-  nh.param("min_detected_markers", params.min_detected_markers, 3);
-  nh.param("circle_radius", params.circle_radius, 0.12);
-  nh.param("annulus_half_width", params.annulus_half_width, 0.025);
-  nh.param("board_width", params.board_width, 1.4);
-  nh.param("board_height", params.board_height, 1.0);
-  nh.param("board_roi_margin", params.board_roi_margin, 0.08);
-  nh.param("board_roi_depth", params.board_roi_depth, 0.12);
-  nh.param("auto_roi_voxel_leaf", params.auto_roi_voxel_leaf, 0.01);
-  nh.param("annulus_voxel_leaf", params.annulus_voxel_leaf, 0.005);
-  nh.param("image_path", params.image_path, string("/home/chunran/calib_ws/src/fast_calib/data/image.png"));
-  nh.param("bag_path", params.bag_path, string("/home/chunran/calib_ws/src/fast_calib/data/input.bag"));
-  nh.param("lidar_topic", params.lidar_topic, string("/livox/lidar"));
-  nh.param("output_path", params.output_path, string("/home/chunran/calib_ws/src/fast_calib/output"));
-  nh.param("use_auto_lidar_roi", params.use_auto_lidar_roi, false);
-  nh.param("x_min", params.x_min, 1.5);
-  nh.param("x_max", params.x_max, 3.0);
-  nh.param("y_min", params.y_min, -1.5);
-  nh.param("y_max", params.y_max, 2.0);
-  nh.param("z_min", params.z_min, -0.5);
-  nh.param("z_max", params.z_max, 2.0);
-  return params;
-}
+// 参数结构体与加载见 include/params.h（ROS-free YAML 配置）
 
 // 计算两组等长点云之间的三维 RMSE
 double computeRMSE(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud1, 

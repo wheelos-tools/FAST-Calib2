@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
-# Build the FAST-Calib2 Docker image and compile the catkin workspace.
-# Compiled binaries land in docker/.ws_devel (bind-mounted) so they survive
-# across `docker run --rm`.
+# Build the FAST-Calib2 Docker image and compile the (ROS-free) binaries with
+# plain CMake. Compiled binaries land in docker/.ws_build (bind-mounted) so
+# they survive across `docker run --rm`.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE="fast-calib2:noetic"
 
-echo "[build] building image ${IMAGE}"
-docker build -t "${IMAGE}" "${REPO}/docker"
+if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
+  echo "[build] building image ${IMAGE}"
+  docker build -t "${IMAGE}" "${REPO}/docker"
+fi
 
-mkdir -p "${REPO}/docker/.ws_build" "${REPO}/docker/.ws_devel"
+mkdir -p "${REPO}/docker/.ws_build"
 
-echo "[build] compiling catkin workspace"
+echo "[build] compiling (cmake, no ROS)"
 docker run --rm \
-    -v "${REPO}:/root/calib_ws/src/fast_calib" \
-    -v "${REPO}/docker/.ws_build:/root/calib_ws/build" \
-    -v "${REPO}/docker/.ws_devel:/root/calib_ws/devel" \
+    -v "${REPO}:/w" \
     "${IMAGE}" \
-    bash -lc "cd /root/calib_ws && catkin_make -DCMAKE_BUILD_TYPE=Release -j\$(nproc)"
+    bash -lc "cd /w/docker/.ws_build && cmake -DCMAKE_BUILD_TYPE=Release /w && make -j\$(nproc)"
 
-echo "[build] done. Run a calibration with: docker/run.sh <cam> <scene>"
+echo "[build] done. Binaries in docker/.ws_build/. Run: docker/run.sh <cam> <scene>"

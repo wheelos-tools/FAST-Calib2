@@ -92,26 +92,22 @@ trap cleanup EXIT
 trap 'cleanup; echo; echo "[multi] interrupted — exiting."; exit 130' INT TERM
 
 # run one single-scene calibration; returns 0 if 4 centers were saved, 1 otherwise.
-# auto-stops the container as soon as the result is written (no Ctrl-C, no RViz loop).
+# (the ROS-free binary exits by itself once the result is written)
 run_scene() {
   local cam="$1" scene="$2"
   local cname="fastcalib_${cam}_${scene}_$$"
   local log="/tmp/${cname}.log"
   CUR_CNAME="$cname"
   docker run --rm --name "$cname" --net=host \
-    -v "$REPO:/root/calib_ws/src/fast_calib" \
-    -v "$REPO/docker/.ws_build:/root/calib_ws/build" \
-    -v "$REPO/docker/.ws_devel:/root/calib_ws/devel" \
-    "$IMG" bash -lc "roslaunch fast_calib calib_cam.launch cam:=$cam scene:=$scene rviz:=false" \
-    >"$log" 2>&1 &
-  local pid=$! rc=2 k
-  for k in $(seq 1 90); do
-    if grep -qa "Saved four pairs of target centers" "$log"; then rc=0; break; fi
-    if grep -qa "Need 4 centers, got" "$log";           then rc=1; break; fi
-    kill -0 "$pid" 2>/dev/null || { rc=1; break; }
-    sleep 2
-  done
-  docker kill "$cname" >/dev/null 2>&1; wait "$pid" 2>/dev/null; CUR_CNAME=""
+    -v "$REPO:/w" \
+    "$IMG" /w/docker/.ws_build/fast_calib \
+      --config "/w/config/cameras/$cam.yaml" \
+      --scene "/w/calib_data/$cam/$scene" \
+      --output "/w/output/$cam" \
+    >"$log" 2>&1
+  CUR_CNAME=""
+  local rc=1
+  grep -qa "Saved four pairs of target centers" "$log" && rc=0
   [ "$rc" = 0 ] && sed -n 's/\x1b\[[0-9;]*m//gp' "$log" | grep -a "Result] RMSE" | tail -1
   return "$rc"
 }
@@ -150,11 +146,11 @@ if [ "$blocks" -lt 3 ]; then
 fi
 
 echo "[multi] running joint multi-scene calibration ..."
-timeout 90 docker run --rm --net=host \
-  -v "$REPO:/root/calib_ws/src/fast_calib" \
-  -v "$REPO/docker/.ws_build:/root/calib_ws/build" \
-  -v "$REPO/docker/.ws_devel:/root/calib_ws/devel" \
-  "$IMG" bash -lc "roslaunch fast_calib multi_calib_cam.launch cam:=$CAM" >/tmp/${CAM}_multi.log 2>&1
+docker run --rm --net=host \
+  -v "$REPO:/w" \
+  "$IMG" /w/docker/.ws_build/multi_fast_calib \
+    --config "/w/config/cameras/$CAM.yaml" \
+    --output "/w/output/$CAM" >/tmp/${CAM}_multi.log 2>&1 || true
 
 RESULT="$REPO/output/$CAM/multi_calib_result.txt"
 if [ ! -s "$RESULT" ]; then

@@ -5,17 +5,17 @@
 #
 # Prerequisite: run docker/run.sh <cam> sceneN for at least 3 scenes first.
 # Each single-scene run appends to output/<cam>/circle_center_record.txt, which
-# this step reads (it uses the last 3 scene blocks). Result is written to
-# output/<cam>/multi_calib_result.txt.
+# this step reads (it uses the last 3 scene blocks). Results are written to
+# output/<cam>/multi_calib_result.txt and multi_calib_extrinsics.yaml.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE="fast-calib2:noetic"
 CAM="${1:-cam0}"
 
-docker run --rm -it --net=host \
-    -v "${REPO}:/root/calib_ws/src/fast_calib" \
-    -v "${REPO}/docker/.ws_build:/root/calib_ws/build" \
-    -v "${REPO}/docker/.ws_devel:/root/calib_ws/devel" \
+docker run --rm --net=host \
+    -v "${REPO}:/w" \
     "${IMAGE}" \
-    bash -lc "roslaunch fast_calib multi_calib_cam.launch cam:=${CAM}"
+    /w/docker/.ws_build/multi_fast_calib \
+      --config "/w/config/cameras/${CAM}.yaml" \
+      --output "/w/output/${CAM}"

@@ -38,18 +38,12 @@ run_scene() {
   local log="/tmp/${cn}.log"
   CUR="$cn"
   docker run --rm --name "$cn" --net=host \
-    -v "$REPO:/root/calib_ws/src/fast_calib" \
-    -v "$REPO/docker/.ws_build:/root/calib_ws/build" \
-    -v "$REPO/docker/.ws_devel:/root/calib_ws/devel" \
-    "$IMG" bash -lc "roslaunch fast_calib calib_cam.launch cam:=$CAM scene:=$s rviz:=false" >"$log" 2>&1 &
-  local pid=$!
-  local i
-  for i in $(seq 1 45); do
-    grep -qa "Saved four pairs of target centers" "$log" && break
-    grep -qa "Need 4 centers, got" "$log" && break
-    sleep 2
-  done
-  docker kill "$cn" >/dev/null 2>&1; wait "$pid" 2>/dev/null; CUR=""
+    -v "$REPO:/w" \
+    "$IMG" /w/docker/.ws_build/fast_calib \
+      --config "/w/config/cameras/$CAM.yaml" \
+      --scene "/w/calib_data/$CAM/$s" \
+      --output "/w/output/$CAM" >"$log" 2>&1
+  CUR=""
   if grep -qa "Saved four pairs of target centers" "$log"; then
     echo "  $s OK   $(grep -a 'Result] RMSE' "$log" | tail -1 | sed 's/\x1b\[[0-9;]*m//g')"
     return 0
@@ -86,11 +80,11 @@ if [ "$blocks" -lt 3 ]; then
 fi
 
 echo "[multi] joint fit ..."
-timeout 90 docker run --rm --net=host \
-  -v "$REPO:/root/calib_ws/src/fast_calib" \
-  -v "$REPO/docker/.ws_build:/root/calib_ws/build" \
-  -v "$REPO/docker/.ws_devel:/root/calib_ws/devel" \
-  "$IMG" bash -lc "roslaunch fast_calib multi_calib_cam.launch cam:=$CAM" >/tmp/${CAM}_multi.log 2>&1 || true
+docker run --rm --net=host \
+  -v "$REPO:/w" \
+  "$IMG" /w/docker/.ws_build/multi_fast_calib \
+    --config "/w/config/cameras/$CAM.yaml" \
+    --output "/w/output/$CAM" >/tmp/${CAM}_multi.log 2>&1 || true
 
 RESULT="$REPO/output/$CAM/multi_calib_result.txt"
 echo
