@@ -35,14 +35,16 @@ cd $APOLLO
 bash docker/scripts/dev_start.sh      # 若 apollo_dev_* 已在运行则跳过
 bash docker/scripts/dev_into.sh
 
-# 标准 Apollo 编译命令（在容器内执行），然后退出容器
+# 标准 Apollo 编译命令（在容器内执行），仅编译本模块
 bash apollo.sh build_opt calibration/fast_calib
+
+# 把可执行文件收集到代码目录旁（仍在容器内 —— bazel-bin 软链接只在容器内
+# 可正确解析），然后退出容器
+mkdir -p modules/calibration/fast_calib/build
+cp -f bazel-bin/modules/calibration/fast_calib/{fast_calib,multi_fast_calib,lidar_center_test} modules/calibration/fast_calib/build/
 exit
 
-# 把可执行文件收集到代码目录旁（主机侧）
 cd $APOLLO/modules/calibration/fast_calib
-mkdir -p build
-cp -f $APOLLO/bazel-bin/modules/calibration/fast_calib/{fast_calib,multi_fast_calib,lidar_center_test} build/
 ```
 
 可执行文件静态链接了工作空间的 PCL/OpenCV，可直接在主机上运行。首次编译会把

@@ -33,14 +33,16 @@ cd $APOLLO
 bash docker/scripts/dev_start.sh      # skip if apollo_dev_* is already running
 bash docker/scripts/dev_into.sh
 
-# standard Apollo build (inside the container), then leave the container
+# standard Apollo build (inside the container), scoped to this module
 bash apollo.sh build_opt calibration/fast_calib
+
+# collect the binaries next to the code (still inside the container — the
+# bazel-bin symlink only resolves there), then leave
+mkdir -p modules/calibration/fast_calib/build
+cp -f bazel-bin/modules/calibration/fast_calib/{fast_calib,multi_fast_calib,lidar_center_test} modules/calibration/fast_calib/build/
 exit
 
-# collect the binaries next to the code (host side)
 cd $APOLLO/modules/calibration/fast_calib
-mkdir -p build
-cp -f $APOLLO/bazel-bin/modules/calibration/fast_calib/{fast_calib,multi_fast_calib,lidar_center_test} build/
 ```
 
 The binaries are statically linked against the workspace's PCL/OpenCV and run
