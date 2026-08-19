@@ -36,24 +36,14 @@ bash docker/scripts/dev_into.sh
 # standard Apollo build (inside the container), scoped to this module
 bash apollo.sh build_opt calibration/fast_calib
 
-# collect the binaries next to the code (still inside the container — the
-# bazel-bin symlink only resolves there), then leave
-mkdir -p modules/calibration/fast_calib/build
-cp -f bazel-bin/modules/calibration/fast_calib/{fast_calib,multi_fast_calib,lidar_center_test} modules/calibration/fast_calib/build/
-exit
-
-cd $APOLLO/modules/calibration/fast_calib
+# stay inside the container and run straight from bazel-bin — no copy step
+cd /apollo/modules/calibration/fast_calib
+FC=/apollo/bazel-bin/modules/calibration/fast_calib
 ```
 
-The binaries are statically linked against the workspace's PCL/OpenCV and run
-directly on the host. The first build compiles PCL/OpenCV once (slow);
-rebuilds are incremental. **From here on, work from
-`$APOLLO/modules/calibration/fast_calib`** — configs, data, and outputs live
-there.
-
-> No Apollo checkout on the machine? Fallback:
-> `sudo apt install cmake libpcl-dev libopencv-dev libeigen3-dev` then
-> `mkdir -p build && cd build && cmake .. && make -j`.
+The first build compiles PCL/OpenCV once (slow); rebuilds are incremental.
+All following commands run inside the container from
+`/apollo/modules/calibration/fast_calib`, calling the binaries via `$FC/...`.
 
 ## 3. Run calibration
 
@@ -69,18 +59,17 @@ and a per-camera config `config/cameras/<cam>.yaml` (copy
 Run single-scene calibration:
 
 ```bash
-./build/fast_calib --config config/cameras/<cam>.yaml --scene calib_data/<cam>/<scene> --output output/<cam>
+$FC/fast_calib --config config/cameras/<cam>.yaml --scene calib_data/<cam>/<scene> --output output/<cam>
 ```
 
 After collecting at least three scenes (run the command above once per scene),
 run multi-scene joint calibration:
 
 ```bash
-./build/multi_fast_calib --config config/cameras/<cam>.yaml --output output/<cam>
+$FC/multi_fast_calib --config config/cameras/<cam>.yaml --output output/<cam>
 ```
 
-Results in `output/<cam>/`: `single_calib_result.txt` /
-`multi_calib_result.txt` (FAST-LIVO2 format, `T_cam_lidar`) and
+Results in `output/<cam>/`: 
 `single_calib_extrinsics.yaml` / `multi_calib_extrinsics.yaml` (Apollo
 convention — camera pose in the LiDAR frame, drop-in for Apollo perception
 params). A good run prints camera `4 centers found`, LiDAR
@@ -100,15 +89,15 @@ camera-LiDAR calibration.
 Run solid-state / dense LiDAR data (Livox, AT128, ...):
 
 ```bash
-./build/lidar_center_test --config config/cameras/<cam>.yaml calib_data/<cam>/<scene>/cloud.pcd - solid
-./build/lidar_center_test --config config/cameras/<cam>.yaml calib_data/<cam>/<scene>/record /apollo/sensor/<lidar>/PointCloud2 solid
+$FC/lidar_center_test --config config/cameras/<cam>.yaml calib_data/<cam>/<scene>/cloud.pcd - solid
+$FC/lidar_center_test --config config/cameras/<cam>.yaml calib_data/<cam>/<scene>/record /apollo/sensor/<lidar>/PointCloud2 solid
 ```
 
 Run mechanical LiDAR data (set `beam_altitudes_deg` in the config so the
 scan-ring index is synthesized for clouds without a `ring` field):
 
 ```bash
-./build/lidar_center_test --config config/cameras/<cam>.yaml calib_data/<cam>/<scene>/cloud.pcd - mech
+$FC/lidar_center_test --config config/cameras/<cam>.yaml calib_data/<cam>/<scene>/cloud.pcd - mech
 ```
 
 The test tool writes into the config's output directory:

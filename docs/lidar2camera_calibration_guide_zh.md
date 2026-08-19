@@ -38,22 +38,19 @@ bash docker/scripts/dev_into.sh
 # 标准 Apollo 编译命令（在容器内执行），仅编译本模块
 bash apollo.sh build_opt calibration/fast_calib
 
-# 把可执行文件收集到代码目录旁（仍在容器内 —— bazel-bin 软链接只在容器内
-# 可正确解析），然后退出容器
-mkdir -p modules/calibration/fast_calib/build
-cp -f bazel-bin/modules/calibration/fast_calib/{fast_calib,multi_fast_calib,lidar_center_test} modules/calibration/fast_calib/build/
-exit
-
-cd $APOLLO/modules/calibration/fast_calib
+# 留在容器内，直接使用 bazel-bin 里的可执行文件 —— 无需拷贝
+cd /apollo/modules/calibration/fast_calib
+FC=/apollo/bazel-bin/modules/calibration/fast_calib
 ```
 
-可执行文件静态链接了工作空间的 PCL/OpenCV，可直接在主机上运行。首次编译会把
-PCL/OpenCV 编译一遍（较慢）；之后为增量编译。**后续步骤都在
-`$APOLLO/modules/calibration/fast_calib` 目录下进行** —— 配置、数据、输出都放在这里。
+首次编译会把 PCL/OpenCV 编译一遍（较慢）；之后为增量编译。**后续步骤都在容器内的
+`/apollo/modules/calibration/fast_calib` 目录下进行**，通过 `$FC/...` 调用
+可执行文件（`bazel-bin` 软链接在容器内保证可解析）。
 
 > 机器上没有 Apollo？后备方案：
 > `sudo apt install cmake libpcl-dev libopencv-dev libeigen3-dev`，然后
-> `mkdir -p build && cd build && cmake .. && make -j`。
+> `mkdir -p build && cd build && cmake .. && make -j`，并在下面的命令中使用
+> `FC=./build`。
 
 ## 3. 运行标定
 
@@ -71,7 +68,7 @@ PCL/OpenCV 编译一遍（较慢）；之后为增量编译。**后续步骤都�
 单场景标定（对 ≥3 个板姿态各运行一次）：
 
 ```bash
-./build/fast_calib --config config/cameras/<cam>.yaml --scene calib_data/<cam>/<scene> --output output/<cam>
+$FC/fast_calib --config config/cameras/<cam>.yaml --scene calib_data/<cam>/<scene> --output output/<cam>
 ```
 
 成功标志：相机 `4 centers found`、雷达 `Number of edge clusters: 4`、
@@ -80,7 +77,7 @@ PCL/OpenCV 编译一遍（较慢）；之后为增量编译。**后续步骤都�
 多场景联合标定（使用最近 ≥3 个场景）：
 
 ```bash
-./build/multi_fast_calib --config config/cameras/<cam>.yaml --output output/<cam>
+$FC/multi_fast_calib --config config/cameras/<cam>.yaml --output output/<cam>
 ```
 
 采信结果前先做重投影检查 —— **每个**场景中红色高反点都必须落在 4 个白环上：
@@ -99,11 +96,11 @@ python3 scripts/render_scene_qa.py calib_data/<cam>/<scene> output/<cam>/multi_c
 
 ```bash
 # 固态/稠密雷达（Livox、AT128 等），PCD 或 cyber record 输入：
-./build/lidar_center_test --config config/cameras/<cam>.yaml calib_data/<cam>/<scene>/cloud.pcd - solid
-./build/lidar_center_test --config config/cameras/<cam>.yaml calib_data/<cam>/<scene>/record /apollo/sensor/<lidar>/PointCloud2 solid
+$FC/lidar_center_test --config config/cameras/<cam>.yaml calib_data/<cam>/<scene>/cloud.pcd - solid
+$FC/lidar_center_test --config config/cameras/<cam>.yaml calib_data/<cam>/<scene>/record /apollo/sensor/<lidar>/PointCloud2 solid
 
 # 机械雷达（配置中需有 beam_altitudes_deg）：
-./build/lidar_center_test --config config/cameras/<cam>.yaml calib_data/<cam>/<scene>/cloud.pcd - mech
+$FC/lidar_center_test --config config/cameras/<cam>.yaml calib_data/<cam>/<scene>/cloud.pcd - mech
 ```
 
 输出 `*_centers.txt`（4 个环心坐标）和 `*_debug_cloud.pcd`（板点 = 强度伪彩、
