@@ -1,145 +1,104 @@
 # FAST-Calib2 Simple Guide
 
-The shortest path from a fresh machine to a LiDAR↔camera extrinsic, assuming
-the calibration data (images + point clouds) is already captured. For capture,
-tuning, and troubleshooting see the
-[detailed guide](lidar2camera_calibration_guide.md).
+Minimal end-to-end usage, mirroring the official run examples: deploy, build
+in the Apollo environment, calibrate with one command per step. Assumes the
+calibration data is already captured (see the
+[detailed guide](lidar2camera_calibration_guide.md) for capture, config
+details, and troubleshooting).
 
-## 1. Get the code
-
-Clone anywhere you keep projects — the tool is self-contained and nothing
-depends on its location (on our Jetsons the convention is a workspace dir like
-`/home/nvidia/workspace/01code/`):
+## 1. Deploy the code
 
 ```bash
-cd ~/workspace/01code            # or any directory you prefer
+cd ~/workspace/01code                # or any directory you prefer
 git clone https://github.com/wheelos-tools/FAST-Calib2.git
 cd FAST-Calib2
 git checkout feat/ros-free-apollo
 ```
 
-## 2. Compile (CMake)
+## 2. Start the Apollo container and compile
 
-Install the dependencies once, then build. No ROS, no Apollo checkout needed:
-
-```bash
-sudo apt install -y cmake libpcl-dev libopencv-dev libeigen3-dev
-
-mkdir -p build && cd build
-cmake ..
-make -j$(nproc)
-cd ..
-```
-
-This produces three binaries in `build/`:
-
-| Binary | Purpose |
-|---|---|
-| `build/fast_calib` | single-scene calibration (one board placement) |
-| `build/multi_fast_calib` | joint fit over the last ≥3 single-scene runs |
-| `build/lidar_center_test` | LiDAR-only annulus-extraction check (optional) |
-
-## 3. Configure your camera
-
-Each camera has one config file. Copy the template and edit it:
+The build runs inside the Apollo dev environment (bazel, scoped to this module
+only — it does not build the Apollo tree). Start the dev container from your
+Apollo workspace if one is not already running, then compile:
 
 ```bash
-cp config/cameras/_template.yaml config/cameras/cam0.yaml
+# start the Apollo dev container (skip if apollo_dev_* is already running)
+cd /path/to/apollo && bash docker/scripts/dev_start.sh
+
+# compile FAST-Calib2 (from the FAST-Calib2 checkout)
+cd ~/workspace/01code/FAST-Calib2
+APOLLO_HOST=/path/to/apollo scripts/apollo_build.sh
 ```
 
-Fill in these blocks (everything else can stay at the defaults):
+Output: `build/{fast_calib, multi_fast_calib, lidar_center_test}` — statically
+linked against the workspace's PCL/OpenCV, so they run directly on the host.
+The first build compiles PCL/OpenCV once (slow); rebuilds are incremental.
 
-```yaml
-# 1) Camera intrinsics — from a chessboard calibration of THIS exact camera.
-#    Wrong intrinsics silently shift the extrinsic translation.
-  fx: ...
-  fy: ...
-  cx: ...
-  cy: ...
-  k1: ...
-  k2: ...
-  p1: ...
-  p2: ...
+> No Apollo checkout on the machine? Fallback:
+> `sudo apt install cmake libpcl-dev libopencv-dev libeigen3-dev` then
+> `mkdir -p build && cd build && cmake .. && make -j`.
 
-# 2) Board geometry — measure your physical board [meters].
-  marker_size: 0.20            # ArUco marker side length
-  delta_width_qr_center: 0.55  # half horizontal distance between marker centers
-  delta_height_qr_center: 0.35 # half vertical distance between marker centers
-  delta_width_circles: 0.5     # horizontal distance between ring centers
-  delta_height_circles: 0.4    # vertical distance between ring centers
-  circle_radius: 0.12          # ring centerline radius
-  annulus_half_width: 0.025
+## 3. Run calibration
 
-# 3) LiDAR source — only needed when the cloud comes from a cyber record;
-#    a cloud.pcd input ignores the channel.
-  lidar_channel: "/apollo/sensor/<lidar>/PointCloud2"
-  lidar_frame: "<lidar_frame>"   # names written into the Apollo extrinsics YAML
-  camera_frame: "cam0"
-  # beam_altitudes_deg: [...]    # ONLY for low-line mechanical LiDARs (16-line
-                                 # etc.); leave out for AT128 / Livox
+Prepare static acquisition data per scene in `calib_data/<cam>/<scene>/`:
 
-# 4) Board ROI — where the board sits in the LiDAR frame.
-  use_auto_lidar_roi: true       # try auto first
-  # If auto fails, set a manual box (or run scripts/pick_roi.py, which writes
-  # it here for you):
-  x_min: ...
-  x_max: ...
-  y_min: ...
-  y_max: ...
-  z_min: ...
-  z_max: ...
-```
+- `image.png` — the camera frame
+- `record/` — cyber record file(s) of the LiDAR channel, **or** `cloud.pcd`
+- optional `cloud_roi.txt` (from `scripts/pick_roi.py`) — auto-applied manual ROI
 
-## 4. Calibrate
+and a per-camera config `config/cameras/<cam>.yaml` (copy
+`_template.yaml`: intrinsics, board geometry, `lidar_channel`, ROI).
 
-**Data layout.** Put each board placement ("scene") in its own folder:
-
-```
-calib_data/cam0/scene1/image.png       # the camera frame
-calib_data/cam0/scene1/record/rec.*    # cyber record of the LiDAR channel
-                                       #   ...or cloud.pcd (x y z intensity)
-calib_data/cam0/scene1/cloud_roi.txt   # optional per-scene manual ROI
-calib_data/cam0/scene2/...             # ≥3 scenes total, different board poses
-calib_data/cam0/scene3/...
-```
-
-**Run each scene** (repeat for scene1..scene3):
+Run single-scene calibration:
 
 ```bash
-./build/fast_calib --config config/cameras/cam0.yaml \
-                   --scene calib_data/cam0/scene1 \
-                   --output output/cam0
+./build/fast_calib --config config/cameras/<cam>.yaml --scene calib_data/<cam>/<scene> --output output/<cam>
 ```
 
-A good run prints: camera `4 centers found`, LiDAR `Number of edge clusters: 4`
-with concentric fits at your board's radii, and `[Result] RMSE: 0.00xx m`
-(a few millimeters), then exits with code 0. Each success appends the extracted
-centers to `output/cam0/circle_center_record.txt`.
-
-If the LiDAR side finds fewer than 4 clusters: pick a tighter board ROI
-(`scripts/pick_roi.py calib_data/cam0/scene1/cloud.pcd --yaml config/cameras/cam0.yaml`)
-and rerun that scene.
-
-**Joint fit** (after ≥3 successful scenes):
+After collecting at least three scenes (run the command above once per scene),
+run multi-scene joint calibration:
 
 ```bash
-./build/multi_fast_calib --config config/cameras/cam0.yaml --output output/cam0
+./build/multi_fast_calib --config config/cameras/<cam>.yaml --output output/<cam>
 ```
 
-**Check the result** — reproject the LiDAR into each scene's image; the
-high-intensity (red) points must land on the 4 white rings in every scene:
+Results in `output/<cam>/`: `single_calib_result.txt` /
+`multi_calib_result.txt` (FAST-LIVO2 format, `T_cam_lidar`) and
+`single_calib_extrinsics.yaml` / `multi_calib_extrinsics.yaml` (Apollo
+convention — camera pose in the LiDAR frame, drop-in for Apollo perception
+params). A good run prints camera `4 centers found`, LiDAR
+`Number of edge clusters: 4`, and `[Result] RMSE: 0.00xx m` (a few mm).
+
+Verify by reprojection before trusting the result:
 
 ```bash
-python3 -m pip install --user open3d opencv-python numpy   # once
-python3 scripts/render_scene_qa.py calib_data/cam0/scene1 \
-        output/cam0/multi_calib_result.txt --config config/cameras/cam0.yaml \
-        --overlay output/cam0/reproj_scene1.png
+python3 scripts/render_scene_qa.py calib_data/<cam>/<scene> output/<cam>/multi_calib_result.txt --config config/cameras/<cam>.yaml --overlay output/<cam>/reproj_<scene>.png
 ```
 
-**Use the result** — in `output/cam0/`:
+## 4. Standalone LiDAR Center Extraction Test
 
-- `multi_calib_result.txt` — `T_cam_lidar` (`P_cam = R·P_lidar + t`),
-  FAST-LIVO2 format.
-- `multi_calib_extrinsics.yaml` — the same transform in Apollo's extrinsics
-  convention (LiDAR as parent frame, camera as child = camera pose in the
-  LiDAR frame); drop it into the Apollo perception params directory.
+Check annulus center extraction alone (no camera) before running full
+camera-LiDAR calibration.
+
+Run solid-state / dense LiDAR data (Livox, AT128, ...):
+
+```bash
+./build/lidar_center_test --config config/cameras/<cam>.yaml calib_data/<cam>/<scene>/cloud.pcd - solid
+./build/lidar_center_test --config config/cameras/<cam>.yaml calib_data/<cam>/<scene>/record /apollo/sensor/<lidar>/PointCloud2 solid
+```
+
+Run mechanical LiDAR data (set `beam_altitudes_deg` in the config so the
+scan-ring index is synthesized for clouds without a `ring` field):
+
+```bash
+./build/lidar_center_test --config config/cameras/<cam>.yaml calib_data/<cam>/<scene>/cloud.pcd - mech
+```
+
+The test tool writes into the config's output directory:
+
+- `*_centers.txt` — extracted annulus center coordinates
+- `*_debug_cloud.pcd` — board cloud, annulus points, boundary points, and
+  center markers for visualization
+
+Debug PCD colors: board points — intensity color map; annulus points — green;
+solid-LiDAR boundary points — red; centers — white spheres.
