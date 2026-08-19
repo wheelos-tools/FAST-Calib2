@@ -19,20 +19,35 @@ cd FAST-Calib2
 git checkout feat/ros-free-apollo
 ```
 
-## 2. 启动 Apollo 容器并编译
+## 2. 把代码放入 Apollo 工作空间并编译
+
+FAST-Calib2 作为一个普通的 Apollo 模块编译（仅编译本模块，不会编译整个 Apollo）：
 
 ```bash
-# 启动 Apollo dev 容器（若 apollo_dev_* 已在运行则跳过）
-cd /path/to/apollo && bash docker/scripts/dev_start.sh
+APOLLO=/path/to/apollo    # 你的 Apollo 工作空间
 
-# 编译 FAST-Calib2（在 FAST-Calib2 目录下执行）；脚本会自动选择挂载了
-# APOLLO_HOST 的容器，也可用 APOLLO_C=<容器名> 显式指定
-cd ~/workspace/01code/FAST-Calib2
-APOLLO_HOST=/path/to/apollo scripts/apollo_build.sh
+# 把代码复制进工作空间
+mkdir -p $APOLLO/modules/calibration
+cp -r ~/workspace/01code/FAST-Calib2 $APOLLO/modules/calibration/fast_calib
+
+# 启动并进入 Apollo dev 容器
+cd $APOLLO
+bash docker/scripts/dev_start.sh      # 若 apollo_dev_* 已在运行则跳过
+bash docker/scripts/dev_into.sh
+
+# 标准 Apollo 编译命令（在容器内执行），然后退出容器
+bash apollo.sh build_opt calibration/fast_calib
+exit
+
+# 把可执行文件收集到代码目录旁（主机侧）
+cd $APOLLO/modules/calibration/fast_calib
+mkdir -p build
+cp -f $APOLLO/bazel-bin/modules/calibration/fast_calib/{fast_calib,multi_fast_calib,lidar_center_test} build/
 ```
 
-产出：`build/{fast_calib, multi_fast_calib, lidar_center_test}` —— 静态链接，
-可直接在主机上运行。首次编译会把 PCL/OpenCV 编译一遍（较慢）；之后为增量编译。
+可执行文件静态链接了工作空间的 PCL/OpenCV，可直接在主机上运行。首次编译会把
+PCL/OpenCV 编译一遍（较慢）；之后为增量编译。**后续步骤都在
+`$APOLLO/modules/calibration/fast_calib` 目录下进行** —— 配置、数据、输出都放在这里。
 
 > 机器上没有 Apollo？后备方案：
 > `sudo apt install cmake libpcl-dev libopencv-dev libeigen3-dev`，然后

@@ -32,14 +32,18 @@ FAST-Calib2 extends [FAST-Calib](https://github.com/hku-mars/FAST-Calib) to LiDA
 record files** (`cyber_recorder` output, channel with
 `apollo.drivers.PointCloud` messages) or from PCD files.
 
-**Primary build — inside the Apollo dev environment (bazel):** uses the Apollo
-workspace's own third-party modules (`@local_config_pcl`, `@opencv`,
-`@eigen`); needs a running `apollo_dev` container.
+**Primary build — as an Apollo module (bazel):** copy the repo into the Apollo
+workspace and use the standard Apollo build, scoped to this module (uses the
+workspace's own `@local_config_pcl`, `@opencv`, `@eigen`):
 
 ```bash
-APOLLO_HOST=/path/to/apollo scripts/apollo_build.sh
-# -> build/{fast_calib, multi_fast_calib, lidar_center_test}
+cp -r FAST-Calib2 /path/to/apollo/modules/calibration/fast_calib
+# inside the Apollo dev container (docker/scripts/dev_into.sh):
+bash apollo.sh build_opt calibration/fast_calib
+# binaries -> bazel-bin/modules/calibration/fast_calib/{fast_calib, multi_fast_calib, lidar_center_test}
 ```
+
+(`scripts/apollo_build.sh` automates the copy/build/collect steps.)
 
 **Fallback — plain CMake** (PCL>=1.8, OpenCV>=4.0, Eigen3, CMake>=3.10) for
 machines without an Apollo checkout:
@@ -97,7 +101,7 @@ The steps below are the complete LiDAR↔camera workflow; the
 **Step 1 — Build** (once; see §1 for both options):
 
 ```bash
-APOLLO_HOST=/path/to/apollo scripts/apollo_build.sh   # Apollo env (bazel)
+bash apollo.sh build_opt calibration/fast_calib   # as an Apollo module (§1)
 # or:  mkdir -p build && cd build && cmake .. && make -j
 ```
 

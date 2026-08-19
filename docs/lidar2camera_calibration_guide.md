@@ -22,21 +22,36 @@ cd FAST-Calib2
 git checkout feat/ros-free-apollo
 ```
 
-## 2. Start the Apollo container and compile
+## 2. Move the code into Apollo and compile
+
+FAST-Calib2 builds as a normal Apollo module (scoped — it does not build the
+Apollo tree):
 
 ```bash
-# start the Apollo dev container (skip if apollo_dev_* is already running)
-cd /path/to/apollo && bash docker/scripts/dev_start.sh
+APOLLO=/path/to/apollo    # your Apollo workspace
 
-# compile FAST-Calib2 (from the FAST-Calib2 checkout); picks the running
-# container that mounts APOLLO_HOST, or set APOLLO_C=<name> explicitly
-cd ~/workspace/01code/FAST-Calib2
-APOLLO_HOST=/path/to/apollo scripts/apollo_build.sh
+# move the code into the workspace
+mkdir -p $APOLLO/modules/calibration
+cp -r ~/workspace/01code/FAST-Calib2 $APOLLO/modules/calibration/fast_calib
+
+# start and enter the Apollo dev container
+cd $APOLLO
+bash docker/scripts/dev_start.sh      # skip if apollo_dev_* is already running
+bash docker/scripts/dev_into.sh
+
+# standard Apollo build (inside the container), then leave the container
+bash apollo.sh build_opt calibration/fast_calib
+exit
+
+# collect the binaries next to the code (host side)
+cd $APOLLO/modules/calibration/fast_calib
+mkdir -p build
+cp -f $APOLLO/bazel-bin/modules/calibration/fast_calib/{fast_calib,multi_fast_calib,lidar_center_test} build/
 ```
 
-Output: `build/{fast_calib, multi_fast_calib, lidar_center_test}` — statically
-linked, run directly on the host. First build compiles PCL/OpenCV once (slow);
-rebuilds are incremental.
+The binaries are statically linked, run directly on the host. First build
+compiles PCL/OpenCV once (slow); rebuilds are incremental. **From here on,
+work from `$APOLLO/modules/calibration/fast_calib`.**
 
 > No Apollo checkout? Fallback:
 > `sudo apt install cmake libpcl-dev libopencv-dev libeigen3-dev`, then
