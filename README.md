@@ -22,7 +22,7 @@ FAST-Calib2 extends [FAST-Calib](https://github.com/hku-mars/FAST-Calib) to LiDA
 ## 📖 Documentation
 
 - **[Simple guide](docs/simple_guide.md)** — shortest path: clone → build in the Apollo container → one-line single/multi-scene calibration → standalone LiDAR extraction test.
-- **[Detailed LiDAR↔Camera calibration guide](docs/lidar2camera_calibration_guide.md)** ([中文](docs/lidar2camera_calibration_guide_zh.md)) — end-to-end: environment setup, data capture, formatting, calibration, and evaluation, including Apollo/Cyber sources, multi-scene, and troubleshooting.
+- **[LiDAR↔Camera calibration guide](docs/lidar2camera_calibration_guide.md)** ([中文](docs/lidar2camera_calibration_guide_zh.md)) — the same flow plus data capture and tuning tips.
 - **[Capture & QA helper scripts](scripts/README_lidar2cam_capture.md)** — `capture_scene.sh`, `apollo_build.sh`, `record_to_pcd.py`, `pick_roi.py`, `overlay_reproj.py` / `render_scene_qa.py`, `multi_capture.sh` / `pick_multi_roi.sh`, `intrinsic_board_check.py`.
 - **[What changed in the ROS-free refactor](docs/ros_free_changes.md)** — team-facing summary: Apollo-native input, build, migration notes, validation.
 
