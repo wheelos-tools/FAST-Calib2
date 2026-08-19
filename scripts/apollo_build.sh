@@ -26,11 +26,15 @@ APOLLO_USER="${APOLLO_USER:-nvidia}"
 
 # Pick the dev container. Without APOLLO_C, prefer the running apollo_dev_*
 # container that actually mounts APOLLO_HOST as /apollo (a machine can run
-# several dev containers for different workspaces).
+# several dev containers for different workspaces). The canonical
+# apollo_dev_<user> container is tried first — sibling containers may satisfy
+# the mount check too but carry their own (cold) bazel cache.
 mount_src() { docker inspect "$1" --format \
   '{{range .Mounts}}{{if eq .Destination "/apollo"}}{{.Source}}{{end}}{{end}}' 2>/dev/null; }
 if [ -z "${APOLLO_C:-}" ]; then
-  for c in $(docker ps --format '{{.Names}}' | grep apollo_dev || true); do
+  candidates="apollo_dev_${APOLLO_USER} $(docker ps --format '{{.Names}}' | grep apollo_dev || true)"
+  for c in $candidates; do
+    docker ps --format '{{.Names}}' | grep -qx "$c" || continue
     [ "$(mount_src "$c")" = "$APOLLO_HOST" ] && APOLLO_C="$c" && break
   done
 fi
