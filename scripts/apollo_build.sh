@@ -22,9 +22,32 @@ TOOLS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$TOOLS/.." && pwd)"
 
 APOLLO_HOST="${APOLLO_HOST:?set APOLLO_HOST=<host path of the Apollo workspace>}"
-APOLLO_C="${APOLLO_C:-$(docker ps --format '{{.Names}}' | grep -m1 apollo_dev || true)}"
-[ -n "$APOLLO_C" ] || { echo "ERROR: no running apollo_dev container; set APOLLO_C" >&2; exit 1; }
 APOLLO_USER="${APOLLO_USER:-nvidia}"
+
+# Pick the dev container. Without APOLLO_C, prefer the running apollo_dev_*
+# container that actually mounts APOLLO_HOST as /apollo (a machine can run
+# several dev containers for different workspaces).
+mount_src() { docker inspect "$1" --format \
+  '{{range .Mounts}}{{if eq .Destination "/apollo"}}{{.Source}}{{end}}{{end}}' 2>/dev/null; }
+if [ -z "${APOLLO_C:-}" ]; then
+  for c in $(docker ps --format '{{.Names}}' | grep apollo_dev || true); do
+    [ "$(mount_src "$c")" = "$APOLLO_HOST" ] && APOLLO_C="$c" && break
+  done
+fi
+[ -n "${APOLLO_C:-}" ] || {
+  echo "ERROR: no running apollo_dev container mounts APOLLO_HOST=$APOLLO_HOST as /apollo." >&2
+  echo "       Running candidates and their /apollo mounts:" >&2
+  for c in $(docker ps --format '{{.Names}}' | grep apollo_dev || true); do
+    echo "         $c -> $(mount_src "$c")" >&2
+  done
+  echo "       Fix APOLLO_HOST, or start the right container, or set APOLLO_C explicitly." >&2
+  exit 1
+}
+if [ "$(mount_src "$APOLLO_C")" != "$APOLLO_HOST" ]; then
+  echo "ERROR: container $APOLLO_C mounts /apollo from '$(mount_src "$APOLLO_C")'," >&2
+  echo "       but APOLLO_HOST=$APOLLO_HOST. The build would target the wrong workspace." >&2
+  exit 1
+fi
 
 APOLLO_BUILD_CMD="${APOLLO_BUILD_CMD:-build_opt}"
 MODULE="calibration/fast_calib"
