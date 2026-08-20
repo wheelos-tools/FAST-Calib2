@@ -68,7 +68,9 @@ output/cam0/                        # results are written here
 
 Sample configs in the repo: `config/cameras/_template.yaml` is the annotated
 skeleton to copy (every `# TODO` must be replaced); `cam0.yaml`–`cam4.yaml`
-are real filled-in examples from our 5-camera rig.
+are real filled-in examples from our 5-camera rig. A commented sample
+`cloud_roi.txt` (real AT128 pick) ships at `calib_data/cam0/scene1/` —
+replace or delete it before calibrating real data there.
 
 Run single-scene calibration:
 
