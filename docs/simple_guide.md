@@ -72,6 +72,41 @@ are real filled-in examples from our 5-camera rig. A commented sample
 `cloud_roi.txt` (real AT128 pick) ships at `calib_data/cam0/scene1/` —
 replace or delete it before calibrating real data there.
 
+### Picking a manual board ROI with `pick_roi.py`
+
+Try `use_auto_lidar_roi: true` first. When auto-ROI fails (sparse cloud, other
+reflective objects in view, a wall right behind the board), hand-pick a tight
+box around the board with the interactive Open3D picker. It runs **on the
+host** (needs a display — the machine's own monitor, or `ssh -X`):
+
+```bash
+python3 -m pip install --user open3d numpy     # once
+python3 scripts/pick_roi.py calib_data/<cam>/<scene>/cloud.pcd --yaml config/cameras/<cam>.yaml
+```
+
+(The picker reads `cloud.pcd`. If a scene only has `record/`, dump one first:
+`$FC/fast_calib --config ... --scene ... --dump-pcd calib_data/<cam>/<scene>/cloud.pcd`.)
+
+Manual operation in the window:
+
+1. The cloud opens shaded by intensity — the board's 4 reflective rings show
+   **bright/white**, which is how you find the board.
+2. Navigate: left-drag = rotate, mouse wheel = zoom, wheel-drag (or
+   Ctrl+left-drag) = pan. Get a clear view of the board face first.
+3. **Shift + left-click at least 4 points on the board face**, spread toward
+   the corners so the picks span the whole board. A wrong pick can be undone
+   with **Shift + right-click**.
+4. Press **Q** to finish.
+
+The picker takes the bounding box of your picks, pads it by 0.10 m
+(`--pad` to change), and writes it twice: to
+`calib_data/<cam>/<scene>/cloud_roi.txt` (auto-applied whenever that scene is
+calibrated) and into the `--yaml` config (setting
+`use_auto_lidar_roi: false`). Pick **tightly on the board face only** — the
+point of the box is to keep the wall/background out so plane fitting locks
+onto the board. If the run afterwards still reports fewer than 4 clusters,
+re-pick tighter and rerun the scene.
+
 Run single-scene calibration:
 
 ```bash
