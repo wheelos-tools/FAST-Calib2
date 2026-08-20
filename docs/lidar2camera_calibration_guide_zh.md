@@ -54,16 +54,27 @@ FC=/apollo/bazel-bin/modules/calibration/fast_calib
 
 ## 3. 运行标定
 
-每个场景的数据放在 `calib_data/<cam>/<scene>/`：
+所有内容都放在模块目录（`/apollo/modules/calibration/fast_calib`）下。
+一个相机、三个场景的完整布局如下 —— 数据请用真实复制，**不要用软链接**
+（指向主机路径的软链接在容器内会失效）：
 
-- `image.png` —— 相机帧
-- `record/` —— 雷达通道的 cyber record 文件，**或** `cloud.pcd`
-- 可选 `cloud_roi.txt`（由 `scripts/pick_roi.py` 生成）—— 自动应用的手动 ROI
+```
+config/cameras/<cam>.yaml           # 相机配置（见下）
+calib_data/<cam>/scene1/image.png   # 摆位 1 的相机帧
+calib_data/<cam>/scene1/record/rec.00000   # 雷达通道的 cyber record
+                                    #   （也可用 cloud.pcd 代替 record/）
+calib_data/<cam>/scene1/cloud_roi.txt      # 可选的手动 ROI（pick_roi.py 生成），
+                                    #   本场景自动应用
+calib_data/<cam>/scene2/...         # 共 ≥3 个场景，板姿态各不相同
+calib_data/<cam>/scene3/...
+output/<cam>/                       # 结果输出目录
+```
 
-每个相机一份配置 `config/cameras/<cam>.yaml`（复制 `_template.yaml`）：
-**该相机自身**的内参（焦距错误会直接偏移外参平移）、实测的板几何、
-`lidar_channel` + `lidar_frame`/`camera_frame`、ROI。仅低线束机械雷达需要
-`beam_altitudes_deg: [...]`（AT128 / Livox 等稠密/固态雷达省略）。
+相机配置：复制 `config/cameras/_template.yaml`（带注释的骨架 —— 所有
+`# TODO` 都必须替换；`cam0.yaml`–`cam4.yaml` 是我们 5 相机设备上填好的真实
+示例）。需要填写：**该相机自身**的内参（焦距错误会直接偏移外参平移）、
+实测的板几何、`lidar_channel` + `lidar_frame`/`camera_frame`、ROI。仅低线束
+机械雷达需要 `beam_altitudes_deg: [...]`（AT128 / Livox 等稠密/固态雷达省略）。
 
 单场景标定（对 ≥3 个板姿态各运行一次）：
 

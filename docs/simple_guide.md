@@ -47,14 +47,28 @@ All following commands run inside the container from
 
 ## 3. Run calibration
 
-Prepare static acquisition data per scene in `calib_data/<cam>/<scene>/`:
+Everything lives under the module directory
+(`/apollo/modules/calibration/fast_calib`). Full layout for one camera
+(`cam0`) with three scenes — copy real files, do **not** symlink (symlinks to
+host paths dangle inside the container):
 
-- `image.png` — the camera frame
-- `record/` — cyber record file(s) of the LiDAR channel, **or** `cloud.pcd`
-- optional `cloud_roi.txt` (from `scripts/pick_roi.py`) — auto-applied manual ROI
+```
+config/cameras/cam0.yaml            # per-camera config: copy _template.yaml and
+                                    #   fill intrinsics, board geometry,
+                                    #   lidar_channel, frames, ROI
+calib_data/cam0/scene1/image.png    # camera frame of board placement 1
+calib_data/cam0/scene1/record/rec.00000    # cyber record of the LiDAR channel
+                                    #   (alternative: cloud.pcd instead of record/)
+calib_data/cam0/scene1/cloud_roi.txt       # optional manual ROI (pick_roi.py),
+                                    #   auto-applied for this scene
+calib_data/cam0/scene2/...          # placement 2  (≥3 scenes total,
+calib_data/cam0/scene3/...          #  different board poses)
+output/cam0/                        # results are written here
+```
 
-and a per-camera config `config/cameras/<cam>.yaml` (copy
-`_template.yaml`: intrinsics, board geometry, `lidar_channel`, ROI).
+Sample configs in the repo: `config/cameras/_template.yaml` is the annotated
+skeleton to copy (every `# TODO` must be replaced); `cam0.yaml`–`cam4.yaml`
+are real filled-in examples from our 5-camera rig.
 
 Run single-scene calibration:
 

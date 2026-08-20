@@ -59,17 +59,30 @@ First build compiles PCL/OpenCV once (slow); rebuilds are incremental.
 
 ## 3. Run calibration
 
-Per-scene data in `calib_data/<cam>/<scene>/`:
+Everything lives under the module directory
+(`/apollo/modules/calibration/fast_calib`). Full layout for one camera with
+three scenes — copy real files, do **not** symlink (symlinks to host paths
+dangle inside the container):
 
-- `image.png` — the camera frame
-- `record/` — cyber record file(s) of the LiDAR channel, **or** `cloud.pcd`
-- optional `cloud_roi.txt` (from `scripts/pick_roi.py`) — auto-applied manual ROI
+```
+config/cameras/<cam>.yaml           # per-camera config (see below)
+calib_data/<cam>/scene1/image.png   # camera frame of board placement 1
+calib_data/<cam>/scene1/record/rec.00000   # cyber record of the LiDAR channel
+                                    #   (alternative: cloud.pcd instead of record/)
+calib_data/<cam>/scene1/cloud_roi.txt      # optional manual ROI (pick_roi.py),
+                                    #   auto-applied for this scene
+calib_data/<cam>/scene2/...         # ≥3 scenes total, different board poses
+calib_data/<cam>/scene3/...
+output/<cam>/                       # results are written here
+```
 
-Per-camera config `config/cameras/<cam>.yaml` (copy `_template.yaml`):
-intrinsics of **this exact camera** (wrong focal length shifts the extrinsic
-translation), measured board geometry, `lidar_channel` +
-`lidar_frame`/`camera_frame`, ROI. Only for low-line mechanical LiDARs add
-`beam_altitudes_deg: [...]` (dense/solid LiDARs like AT128/Livox: omit).
+Per-camera config: copy `config/cameras/_template.yaml` (annotated skeleton —
+replace every `# TODO`; `cam0.yaml`–`cam4.yaml` are real filled-in examples
+from our 5-camera rig). Fill: intrinsics of **this exact camera** (wrong focal
+length shifts the extrinsic translation), measured board geometry,
+`lidar_channel` + `lidar_frame`/`camera_frame`, ROI. Only for low-line
+mechanical LiDARs add `beam_altitudes_deg: [...]` (dense/solid LiDARs like
+AT128/Livox: omit).
 
 Single-scene calibration (repeat for ≥3 board poses):
 
