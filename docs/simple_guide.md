@@ -151,11 +151,14 @@ scan-ring index is synthesized for clouds without a `ring` field):
 $FC/lidar_center_test --config config/cameras/<cam>.yaml calib_data/<cam>/<scene>/cloud.pcd - mech
 ```
 
-The test tool writes into the config's output directory:
+The test tool writes into the config's `output_path` (unset in the shipped
+configs → `output/` relative to the working directory, i.e.
+`/apollo/modules/calibration/fast_calib/output/`). The file prefix comes from
+the cloud's parent dir + filename — for `calib_data/<cam>/scene1/cloud.pcd`:
 
-- `*_centers.txt` — extracted annulus center coordinates
-- `*_debug_cloud.pcd` — board cloud, annulus points, boundary points, and
-  center markers for visualization
+- `output/scene1_cloud_centers.txt` — extracted annulus center coordinates
+- `output/scene1_cloud_debug_cloud.pcd` — board cloud, annulus points,
+  boundary points, and center markers for visualization
 
 Debug PCD colors: board points — intensity color map; annulus points — green;
 solid-LiDAR boundary points — red; centers — white spheres.
